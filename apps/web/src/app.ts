@@ -13,6 +13,7 @@ import { groupRoutes } from "./routes/groups";
 import { resolveRoutes } from "./routes/resolve";
 import { assignmentRoutes } from "./routes/assignments";
 import { reconcileRoutes } from "./routes/reconcile";
+import { auditRoutes } from "./routes/audit";
 
 export function createApp() {
   const app = express();
@@ -32,6 +33,7 @@ export function createApp() {
   app.use("/api", resolveRoutes);
   app.use("/api", assignmentRoutes);
   app.use("/api", reconcileRoutes);
+  app.use("/api", auditRoutes);
 
   // ─── Error handling ────────────────────────────────────────────────────────
   app.use(
