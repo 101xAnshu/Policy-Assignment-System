@@ -21,3 +21,18 @@ export {
   type ReconcileResult,
   type CompanyReconcileResult,
 } from "./reconciler";
+
+export {
+  buildDependencyIndex,
+  type DependencyIndex,
+} from "./dependency-index";
+
+export {
+  reconcileEmployeeScoped,
+} from "./scoped-reconciler";
+
+export {
+  processNextOutboxEvents,
+  processDueTemporalJobs,
+  type OutboxProcessSummary,
+} from "./outbox-processor";

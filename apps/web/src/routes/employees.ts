@@ -18,6 +18,7 @@ import { db } from "@warp/db";
 import {
   employees,
   employeeVersions,
+  publishOutboxEvent,
 } from "@warp/db";
 import { eq, and, isNull, sql } from "drizzle-orm";
 
@@ -120,7 +121,16 @@ employeeRoutes.post("/", async (req: Request, res: Response) => {
         hireDate,
       });
 
-      // Phase 5: INSERT INTO outbox_events ... here
+      // Publish outbox event for asynchronous reconciliation
+      await publishOutboxEvent(
+        {
+          eventType: "EMPLOYEE_CREATED",
+          entityType: "EMPLOYEE",
+          entityId: employee.id,
+          payload: { companyId, hireDate },
+        },
+        tx,
+      );
 
       return employee;
     });
@@ -227,7 +237,16 @@ employeeRoutes.patch("/:id", async (req: Request, res: Response) => {
         .where(eq(employees.id, employeeId))
         .returning();
 
-      // Phase 5: INSERT INTO outbox_events with changedFields + effectiveAt
+      // Publish outbox event with changedFields + effectiveAt
+      await publishOutboxEvent(
+        {
+          eventType: "EMPLOYEE_UPDATED",
+          entityType: "EMPLOYEE",
+          entityId: employeeId,
+          payload: { changedFields, effectiveAt },
+        },
+        tx,
+      );
 
       return { employee: updated, changedFields, effectiveAt, version: newVersion };
     });

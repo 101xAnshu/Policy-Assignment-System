@@ -1,10 +1,14 @@
 /**
- * Reconciliation API routes.
- * Build Spec §23, §24, §29.
+ * Reconciliation & Worker API routes.
+ * Build Spec §23, §24, §25, §26, §27, §29.
  *
  * GET  /api/employees/:id/reconcile/preview — preview diff without applying changes
  * POST /api/employees/:id/reconcile         — apply reconciliation for an employee
  * POST /api/companies/:id/reconcile         — apply reconciliation across all company employees
+ * POST /api/worker/process-outbox           — trigger worker processing of pending outbox events
+ * POST /api/worker/process-temporal         — trigger worker processing of due temporal milestone jobs
+ * GET  /api/outbox                          — list outbox event queue
+ * GET  /api/temporal/jobs                   — list scheduled temporal milestone jobs
  */
 
 import { Router, type Request, type Response } from "express";
@@ -12,7 +16,11 @@ import {
   previewReconcile,
   reconcileEmployee,
   reconcileCompany,
+  processNextOutboxEvents,
+  processDueTemporalJobs,
 } from "@warp/reconciler";
+import { db, outboxEvents, temporalJobs } from "@warp/db";
+import { desc, isNull, lte } from "drizzle-orm";
 
 export const reconcileRoutes = Router();
 
@@ -80,3 +88,67 @@ reconcileRoutes.post(
     }
   },
 );
+
+// ─── POST /api/worker/process-outbox ─────────────────────────────────────────
+
+reconcileRoutes.post(
+  "/worker/process-outbox",
+  async (req: Request, res: Response) => {
+    try {
+      const batchSize = req.body.batchSize ? Number(req.body.batchSize) : 20;
+      const result = await processNextOutboxEvents(batchSize);
+      res.json(result);
+    } catch (err) {
+      console.error("Error processing outbox events:", err);
+      res.status(500).json({ error: "Failed to process outbox events" });
+    }
+  },
+);
+
+// ─── POST /api/worker/process-temporal ───────────────────────────────────────
+
+reconcileRoutes.post(
+  "/worker/process-temporal",
+  async (req: Request, res: Response) => {
+    try {
+      const asOf = req.body.asOf ? new Date(req.body.asOf) : new Date();
+      const result = await processDueTemporalJobs(asOf);
+      res.json(result);
+    } catch (err) {
+      console.error("Error processing temporal jobs:", err);
+      res.status(500).json({ error: "Failed to process temporal jobs" });
+    }
+  },
+);
+
+// ─── GET /api/outbox ─────────────────────────────────────────────────────────
+
+reconcileRoutes.get("/outbox", async (_req: Request, res: Response) => {
+  try {
+    const events = await db
+      .select()
+      .from(outboxEvents)
+      .orderBy(desc(outboxEvents.createdAt))
+      .limit(50);
+    res.json(events);
+  } catch (err) {
+    console.error("Error listing outbox events:", err);
+    res.status(500).json({ error: "Failed to list outbox events" });
+  }
+});
+
+// ─── GET /api/temporal/jobs ──────────────────────────────────────────────────
+
+reconcileRoutes.get("/temporal/jobs", async (_req: Request, res: Response) => {
+  try {
+    const jobs = await db
+      .select()
+      .from(temporalJobs)
+      .orderBy(desc(temporalJobs.triggerAt))
+      .limit(50);
+    res.json(jobs);
+  } catch (err) {
+    console.error("Error listing temporal jobs:", err);
+    res.status(500).json({ error: "Failed to list temporal jobs" });
+  }
+});

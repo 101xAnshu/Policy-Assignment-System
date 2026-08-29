@@ -18,6 +18,7 @@ import {
   assignmentRuleVersions,
   policies,
   policyCategories,
+  publishOutboxEvent,
 } from "@warp/db";
 import { eq, desc } from "drizzle-orm";
 import { validatePredicate, extractDependencies } from "@warp/domain";
@@ -209,7 +210,20 @@ ruleRoutes.post("/:id/publish", async (req: Request, res: Response) => {
         .where(eq(assignmentRules.id, ruleId))
         .returning();
 
-      // Phase 5: INSERT INTO outbox_events for reconciliation
+      // Publish outbox event for rule activation
+      await publishOutboxEvent(
+        {
+          eventType: "RULE_PUBLISHED",
+          entityType: "ASSIGNMENT_RULE",
+          entityId: ruleId,
+          payload: {
+            companyId: rule.companyId,
+            version: latestVersion.version,
+            effectiveAt: latestVersion.effectiveFrom,
+          },
+        },
+        tx,
+      );
 
       return { rule: updated, publishedVersion: latestVersion };
     });
