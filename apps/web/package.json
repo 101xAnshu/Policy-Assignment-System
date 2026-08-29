@@ -12,7 +12,8 @@
     "express": "^4.21.0",
     "@warp/db": "*",
     "@warp/domain": "*",
-    "@warp/resolver": "*"
+    "@warp/resolver": "*",
+    "@warp/reconciler": "*"
   },
   "devDependencies": {
     "@types/express": "^4.17.21",
