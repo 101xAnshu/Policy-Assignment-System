@@ -4,5 +4,13 @@
   "private": true,
   "type": "module",
   "exports": { ".": "./src/index.ts" },
-  "dependencies": { "@warp/domain": "*", "@warp/rule-engine": "*" }
+  "dependencies": {
+    "@warp/domain": "*",
+    "@warp/rule-engine": "*",
+    "@warp/db": "*",
+    "drizzle-orm": "^0.33.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
 }

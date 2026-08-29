@@ -10,6 +10,7 @@ import { employeeRoutes } from "./routes/employees";
 import { policyRoutes } from "./routes/policies";
 import { ruleRoutes } from "./routes/rules";
 import { groupRoutes } from "./routes/groups";
+import { resolveRoutes } from "./routes/resolve";
 
 export function createApp() {
   const app = express();
@@ -26,6 +27,7 @@ export function createApp() {
   app.use("/api", policyRoutes);
   app.use("/api/rules", ruleRoutes);
   app.use("/api/groups", groupRoutes);
+  app.use("/api", resolveRoutes);
 
   // ─── Error handling ────────────────────────────────────────────────────────
   app.use(
