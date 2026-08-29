@@ -1,0 +1,19 @@
+{
+  "name": "@warp/tests",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:unit": "vitest run --dir unit",
+    "test:integration": "vitest run --dir integration"
+  },
+  "devDependencies": {
+    "vitest": "^2.0.0",
+    "typescript": "^5.5.0",
+    "@types/node": "^20.14.0",
+    "@warp/domain": "*",
+    "@warp/db": "*"
+  }
+}

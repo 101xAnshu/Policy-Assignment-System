@@ -1,0 +1,27 @@
+{
+  "name": "policy-assignment-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Temporal, deterministic, explainable policy assignment system",
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "tests"
+  ],
+  "scripts": {
+    "dev:api": "npm run dev --workspace=apps/web",
+    "dev:worker": "npm run dev --workspace=apps/worker",
+    "db:push": "npm run db:push --workspace=packages/db",
+    "db:seed": "npm run db:seed --workspace=packages/db",
+    "db:reset": "npm run db:reset --workspace=packages/db",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --build"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0",
+    "tsx": "^4.16.0",
+    "@types/node": "^20.14.0"
+  }
+}

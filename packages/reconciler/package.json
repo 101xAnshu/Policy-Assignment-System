@@ -1,0 +1,8 @@
+{
+  "name": "@warp/reconciler",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": { "@warp/domain": "*", "@warp/resolver": "*", "@warp/db": "*" }
+}
