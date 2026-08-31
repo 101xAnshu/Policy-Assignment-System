@@ -1,16 +1,13 @@
 /**
  * Employee API routes.
- * Build Spec §29.
+ * Build Spec §29, §31, §32.
  *
- * GET  /api/employees          — list employees
- * GET  /api/employees/:id      — get employee detail
- * POST /api/employees          — create employee
- * PATCH /api/employees/:id     — update employee attributes
- *
- * Employee create/update:
- * - Increments `version` on the employee record
- * - Creates a new EmployeeVersion row (valid-time history)
- * - (Phase 5: inserts outbox event for reconciliation)
+ * GET  /api/employees                    — list employees
+ * GET  /api/employees/:id                — get employee detail
+ * POST /api/employees                    — create employee
+ * PATCH /api/employees/:id               — update employee attributes
+ * POST /api/employees/:id/preview-change — preview attribute change diff before applying (§32)
+ * POST /api/employees/preview-onboarding — preview onboarding policies before creation (§31)
  */
 
 import { Router, type Request, type Response } from "express";
@@ -19,8 +16,17 @@ import {
   employees,
   employeeVersions,
   publishOutboxEvent,
+  getActiveAssignmentsAt,
 } from "@warp/db";
 import { eq, and, isNull, sql } from "drizzle-orm";
+import {
+  resolve,
+  loadEmployeeContextAt,
+  loadActiveRulesAt,
+  formatDate,
+} from "@warp/resolver";
+import { computeDiff, type ActualAssignment } from "@warp/reconciler";
+import type { EmployeeContext } from "@warp/domain";
 
 export const employeeRoutes = Router();
 
@@ -33,6 +39,50 @@ employeeRoutes.get("/", async (_req: Request, res: Response) => {
   } catch (err) {
     console.error("Error listing employees:", err);
     res.status(500).json({ error: "Failed to list employees" });
+  }
+});
+
+// ─── POST /api/employees/preview-onboarding (§31) ────────────────────────────
+
+employeeRoutes.post("/preview-onboarding", async (req: Request, res: Response) => {
+  try {
+    const { companyId, country, state, department, employmentType, isManager, hireDate, groupIds } =
+      req.body;
+
+    if (!companyId || !country || !department || !employmentType || !hireDate) {
+      res.status(400).json({
+        error: "Missing required fields for onboarding preview",
+        required: ["companyId", "country", "department", "employmentType", "hireDate"],
+      });
+      return;
+    }
+
+    const evalDate = hireDate;
+    const rules = await loadActiveRulesAt(companyId, evalDate);
+
+    const empContext: EmployeeContext = {
+      id: "preview-onboarding" as any,
+      companyId,
+      country,
+      state: state ?? null,
+      department,
+      employmentType,
+      isManager: isManager ?? false,
+      hireDate,
+      groupIds: groupIds ?? [],
+    };
+
+    const resolution = resolve(empContext, rules, evalDate);
+
+    res.json({
+      evaluationDate: evalDate,
+      employee: empContext,
+      assignments: resolution.assignments,
+      decisions: resolution.decisions,
+    });
+  } catch (err) {
+    console.error("Error previewing onboarding policies:", err);
+    res.status(500).json({ error: "Failed to preview onboarding policies" });
   }
 });
 
@@ -64,6 +114,79 @@ employeeRoutes.get("/:id", async (req: Request, res: Response) => {
   }
 });
 
+// ─── POST /api/employees/:id/preview-change (§32) ────────────────────────────
+
+employeeRoutes.post("/:id/preview-change", async (req: Request, res: Response) => {
+  try {
+    const employeeId = req.params.id;
+    const { updates, effectiveAt: requestedEffectiveAt } = req.body;
+
+    if (!updates || typeof updates !== "object") {
+      res.status(400).json({ error: "Missing updates payload" });
+      return;
+    }
+
+    const effectiveAt = requestedEffectiveAt ?? new Date().toISOString().split("T")[0];
+
+    // 1. Load current employee context at date
+    const currentContext = await loadEmployeeContextAt(employeeId, effectiveAt);
+    if (!currentContext) {
+      res.status(404).json({ error: "Employee not found at effective date" });
+      return;
+    }
+
+    // 2. Build simulated employee context
+    const simulatedContext: EmployeeContext = {
+      id: currentContext.id,
+      companyId: currentContext.companyId,
+      country: updates.country ?? currentContext.country,
+      state: updates.state !== undefined ? updates.state : currentContext.state,
+      department: updates.department ?? currentContext.department,
+      employmentType: updates.employmentType ?? currentContext.employmentType,
+      isManager: updates.isManager !== undefined ? updates.isManager : currentContext.isManager,
+      hireDate: currentContext.hireDate,
+      groupIds: currentContext.groupIds,
+    };
+
+    // 3. Load active rules
+    const rules = await loadActiveRulesAt(currentContext.companyId, effectiveAt);
+
+    // 4. Resolve simulated desired state
+    const simulatedResolution = resolve(simulatedContext, rules, effectiveAt);
+
+    // 5. Load actual assignments
+    const actuals = (await getActiveAssignmentsAt(employeeId, effectiveAt)) as ActualAssignment[];
+
+    // 6. Compute diff
+    const diff = computeDiff(
+      simulatedResolution.assignments,
+      actuals,
+      simulatedResolution.decisions,
+      effectiveAt,
+    );
+
+    res.json({
+      employeeId,
+      effectiveAt,
+      simulatedEmployee: simulatedContext,
+      currentAssignments: actuals,
+      desiredAssignments: simulatedResolution.assignments,
+      decisions: simulatedResolution.decisions,
+      diff,
+      summary: {
+        added: diff.toAdd.length,
+        revoked: diff.toRevoke.length,
+        updated: diff.toUpdate.length,
+        unchanged: diff.unchanged.length,
+        hasChanges: diff.hasChanges,
+      },
+    });
+  } catch (err) {
+    console.error("Error previewing employee attribute change:", err);
+    res.status(500).json({ error: "Failed to preview employee attribute change" });
+  }
+});
+
 // ─── POST /api/employees ─────────────────────────────────────────────────────
 
 employeeRoutes.post("/", async (req: Request, res: Response) => {
@@ -89,7 +212,7 @@ employeeRoutes.post("/", async (req: Request, res: Response) => {
       return;
     }
 
-    // Use a transaction to atomically create employee + initial version
+    // Use a transaction to atomically create employee + initial version + outbox event
     const result = await db.transaction(async (tx) => {
       const [employee] = await tx
         .insert(employees)
@@ -127,7 +250,7 @@ employeeRoutes.post("/", async (req: Request, res: Response) => {
           eventType: "EMPLOYEE_CREATED",
           entityType: "EMPLOYEE",
           entityId: employee.id,
-          payload: { companyId, hireDate },
+          payload: { companyId, hireDate, entityVersion: 1 },
         },
         tx,
       );
@@ -149,15 +272,11 @@ employeeRoutes.patch("/:id", async (req: Request, res: Response) => {
     const employeeId = req.params.id;
     const updates = req.body;
 
-    // The effectiveAt date determines when the change takes business effect.
-    // If not provided, defaults to today.
     const effectiveAt: string =
       updates.effectiveAt ?? new Date().toISOString().split("T")[0];
 
-    // Remove non-attribute fields from updates
     const { effectiveAt: _, ...attributeUpdates } = updates;
 
-    // Allowed updatable fields
     const allowedFields = [
       "name",
       "email",
@@ -207,7 +326,7 @@ employeeRoutes.patch("/:id", async (req: Request, res: Response) => {
           ),
         );
 
-      // Compute new attribute state (merge current with updates)
+      // Compute new attribute state
       const newState = {
         country: (sanitized.country as string) ?? current.country,
         state: sanitized.state !== undefined ? (sanitized.state as string | null) : current.state,
@@ -237,13 +356,13 @@ employeeRoutes.patch("/:id", async (req: Request, res: Response) => {
         .where(eq(employees.id, employeeId))
         .returning();
 
-      // Publish outbox event with changedFields + effectiveAt
+      // Publish outbox event with changedFields + effectiveAt + entityVersion
       await publishOutboxEvent(
         {
           eventType: "EMPLOYEE_UPDATED",
           entityType: "EMPLOYEE",
           entityId: employeeId,
-          payload: { changedFields, effectiveAt },
+          payload: { changedFields, effectiveAt, entityVersion: newVersion },
         },
         tx,
       );

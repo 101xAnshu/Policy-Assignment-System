@@ -4,10 +4,14 @@ import {
   fetchAssignments,
   fetchTimeline,
   updateEmployee,
+  createEmployee,
+  previewOnboarding,
+  previewEmployeeChange,
   processOutbox,
 } from "../api";
 import {
   User,
+  UserPlus,
   MapPin,
   Briefcase,
   Calendar,
@@ -20,6 +24,13 @@ import {
   ArrowUpRight,
   ChevronRight,
   Filter,
+  PlusCircle,
+  MinusCircle,
+  RefreshCw,
+  AlertTriangle,
+  Info,
+  Check,
+  X,
 } from "lucide-react";
 import { WhyModal } from "./WhyModal";
 
@@ -32,13 +43,29 @@ export const EmployeesView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<"policies" | "timeline">("policies");
   const [inspectPolicy, setInspectPolicy] = useState<{ id: string; name: string } | null>(null);
 
-  // Edit Profile Modal state
+  // Edit Profile / Simulation Modal state
   const [showEditModal, setShowEditModal] = useState<boolean>(false);
   const [editState, setEditState] = useState<string>("");
   const [editDept, setEditDept] = useState<string>("");
   const [editEmpType, setEditEmpType] = useState<string>("");
   const [editIsManager, setEditIsManager] = useState<boolean>(false);
   const [updating, setUpdating] = useState<boolean>(false);
+  const [simDiff, setSimDiff] = useState<any | null>(null);
+  const [loadingDiff, setLoadingDiff] = useState<boolean>(false);
+
+  // Onboarding Modal state
+  const [showOnboardModal, setShowOnboardModal] = useState<boolean>(false);
+  const [onboardName, setOnboardName] = useState<string>("");
+  const [onboardEmail, setOnboardEmail] = useState<string>("");
+  const [onboardCountry, setOnboardCountry] = useState<string>("US");
+  const [onboardState, setOnboardState] = useState<string>("California");
+  const [onboardDept, setOnboardDept] = useState<string>("Engineering");
+  const [onboardEmpType, setOnboardEmpType] = useState<string>("FULL_TIME");
+  const [onboardIsManager, setOnboardIsManager] = useState<boolean>(false);
+  const [onboardHireDate, setOnboardHireDate] = useState<string>("2024-08-28");
+  const [onboardPreview, setOnboardPreview] = useState<any | null>(null);
+  const [loadingOnboardPreview, setLoadingOnboardPreview] = useState<boolean>(false);
+  const [creatingEmp, setCreatingEmp] = useState<boolean>(false);
 
   const loadEmployees = async () => {
     const data = await fetchEmployees();
@@ -65,12 +92,72 @@ export const EmployeesView: React.FC = () => {
       .catch(console.error);
   }, [selectedEmp, date]);
 
+  // Compute live diff preview when edit fields change
+  useEffect(() => {
+    if (!showEditModal || !selectedEmp) return;
+
+    setLoadingDiff(true);
+    const updates = {
+      state: editState || null,
+      department: editDept,
+      employmentType: editEmpType,
+      isManager: editIsManager,
+    };
+
+    previewEmployeeChange(selectedEmp.id, updates, date)
+      .then((res) => {
+        setSimDiff(res);
+        setLoadingDiff(false);
+      })
+      .catch((err) => {
+        console.error("Preview change error:", err);
+        setLoadingDiff(false);
+      });
+  }, [showEditModal, editState, editDept, editEmpType, editIsManager, date, selectedEmp]);
+
+  // Compute live onboarding preview when onboarding fields change
+  useEffect(() => {
+    if (!showOnboardModal) return;
+
+    setLoadingOnboardPreview(true);
+    const payload = {
+      companyId: selectedEmp?.companyId ?? employees[0]?.companyId ?? "a0000000-0000-0000-0000-000000000001",
+      country: onboardCountry,
+      state: onboardState || null,
+      department: onboardDept,
+      employmentType: onboardEmpType,
+      isManager: onboardIsManager,
+      hireDate: onboardHireDate,
+    };
+
+    previewOnboarding(payload)
+      .then((res) => {
+        setOnboardPreview(res);
+        setLoadingOnboardPreview(false);
+      })
+      .catch((err) => {
+        console.error("Preview onboarding error:", err);
+        setLoadingOnboardPreview(false);
+      });
+  }, [
+    showOnboardModal,
+    onboardCountry,
+    onboardState,
+    onboardDept,
+    onboardEmpType,
+    onboardIsManager,
+    onboardHireDate,
+    selectedEmp,
+    employees,
+  ]);
+
   const handleOpenEdit = () => {
     if (!selectedEmp) return;
     setEditState(selectedEmp.state || "");
     setEditDept(selectedEmp.department);
     setEditEmpType(selectedEmp.employmentType);
     setEditIsManager(selectedEmp.isManager);
+    setSimDiff(null);
     setShowEditModal(true);
   };
 
@@ -79,13 +166,13 @@ export const EmployeesView: React.FC = () => {
     setUpdating(true);
     try {
       await updateEmployee(selectedEmp.id, {
-        state: editState || undefined,
+        state: editState || null,
         department: editDept,
         employmentType: editEmpType,
         isManager: editIsManager,
+        effectiveAt: date,
       });
 
-      // Automatically run outbox background processor
       await processOutbox();
 
       await loadEmployees();
@@ -101,6 +188,53 @@ export const EmployeesView: React.FC = () => {
     }
   };
 
+  const handleOpenOnboard = () => {
+    setOnboardName("");
+    setOnboardEmail("");
+    setOnboardCountry("US");
+    setOnboardState("California");
+    setOnboardDept("Engineering");
+    setOnboardEmpType("FULL_TIME");
+    setOnboardIsManager(false);
+    setOnboardHireDate("2024-08-28");
+    setOnboardPreview(null);
+    setShowOnboardModal(true);
+  };
+
+  const handleConfirmOnboard = async () => {
+    if (!onboardName || !onboardEmail || !onboardCountry || !onboardDept || !onboardHireDate) {
+      alert("Please fill in all required fields.");
+      return;
+    }
+
+    setCreatingEmp(true);
+    try {
+      const companyId =
+        selectedEmp?.companyId ?? employees[0]?.companyId ?? "a0000000-0000-0000-0000-000000000001";
+
+      const newEmp = await createEmployee({
+        companyId,
+        name: onboardName,
+        email: onboardEmail,
+        country: onboardCountry,
+        state: onboardState || null,
+        department: onboardDept,
+        employmentType: onboardEmpType,
+        isManager: onboardIsManager,
+        hireDate: onboardHireDate,
+      });
+
+      await processOutbox();
+      await loadEmployees();
+      setSelectedEmp(newEmp);
+      setShowOnboardModal(false);
+    } catch (err: any) {
+      alert("Failed to onboard employee: " + err.message);
+    } finally {
+      setCreatingEmp(false);
+    }
+  };
+
   return (
     <div className="flex-1 flex overflow-hidden bg-background">
       {/* Left Sidebar: Employee List */}
@@ -109,6 +243,12 @@ export const EmployeesView: React.FC = () => {
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
             <User className="w-4 h-4 text-brand-400" /> Employees ({employees.length})
           </h2>
+          <button
+            onClick={handleOpenOnboard}
+            className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-brand-500 hover:bg-brand-400 text-white flex items-center gap-1.5 transition-all shadow-md shadow-brand-500/20"
+          >
+            <UserPlus className="w-3.5 h-3.5" /> Onboard
+          </button>
         </div>
 
         <div className="flex-1 overflow-y-auto divide-y divide-slate-800/60 p-2 space-y-1">
@@ -158,142 +298,158 @@ export const EmployeesView: React.FC = () => {
         <div className="flex-1 flex flex-col overflow-y-auto">
           {/* Header Banner */}
           <div className="p-6 border-b border-slate-800 bg-surface-raised/20 flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3">
-                <h1 className="text-2xl font-black text-white">{selectedEmp.name}</h1>
-                <span className="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 border border-slate-700 font-mono">
-                  v{selectedEmp.currentVersion || 1}
-                </span>
-                <span className="text-xs px-2.5 py-1 rounded-full bg-brand-500/10 text-brand-400 border border-brand-500/20 font-medium">
-                  {selectedEmp.employmentType}
-                </span>
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-brand-600 to-indigo-500 flex items-center justify-center font-bold text-xl text-white shadow-lg shadow-brand-500/20">
+                {selectedEmp.name.charAt(0)}
               </div>
-              <div className="flex items-center gap-4 text-xs text-slate-400 mt-2">
-                <span>Hire Date: <strong className="text-slate-200 font-mono">{selectedEmp.hireDate}</strong></span>
-                <span>•</span>
-                <span>Department: <strong className="text-slate-200">{selectedEmp.department}</strong></span>
-                <span>•</span>
-                <span>Location: <strong className="text-slate-200">{selectedEmp.state ? `${selectedEmp.state}, ` : ""}{selectedEmp.country}</strong></span>
+              <div>
+                <div className="flex items-center gap-3">
+                  <h1 className="text-xl font-bold text-white tracking-tight">{selectedEmp.name}</h1>
+                  <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                    v{selectedEmp.version}
+                  </span>
+                  {selectedEmp.isManager && (
+                    <span className="text-xs px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30">
+                      Manager
+                    </span>
+                  )}
+                </div>
+                <p className="text-sm text-slate-400 flex items-center gap-4 mt-1">
+                  <span>{selectedEmp.email}</span>
+                  <span>•</span>
+                  <span>{selectedEmp.department}</span>
+                  <span>•</span>
+                  <span>{selectedEmp.state ? `${selectedEmp.state}, ${selectedEmp.country}` : selectedEmp.country}</span>
+                  <span>•</span>
+                  <span>Hired {selectedEmp.hireDate}</span>
+                </p>
               </div>
             </div>
 
             <div className="flex items-center gap-3">
-              <button
-                onClick={handleOpenEdit}
-                className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-xl bg-surface-raised border border-slate-700 text-slate-200 hover:text-white hover:border-brand-500 transition-colors"
-              >
-                <Edit3 className="w-3.5 h-3.5 text-brand-400" /> Relocate / Edit Attributes
-              </button>
-
-              {/* Point in Time Picker */}
-              <div className="flex items-center gap-2 bg-surface-raised border border-slate-700 rounded-xl px-3 py-1.5">
-                <Calendar className="w-4 h-4 text-cyan-400" />
-                <span className="text-xs text-slate-400">At Date:</span>
+              {/* Date Selector */}
+              <div className="flex items-center gap-2 bg-surface px-3 py-1.5 rounded-xl border border-slate-800">
+                <Calendar className="w-4 h-4 text-slate-400" />
+                <span className="text-xs text-slate-400">Effective:</span>
                 <input
                   type="date"
                   value={date}
                   onChange={(e) => setDate(e.target.value)}
-                  className="bg-transparent text-xs text-white font-mono focus:outline-none"
+                  className="bg-transparent text-sm text-white focus:outline-none cursor-pointer font-mono"
                 />
               </div>
+
+              {/* Edit Profile Button with Preview */}
+              <button
+                onClick={handleOpenEdit}
+                className="px-3.5 py-2 rounded-xl bg-surface-raised hover:bg-slate-700 text-white text-xs font-semibold flex items-center gap-2 border border-slate-700 transition-all shadow-sm"
+              >
+                <Edit3 className="w-3.5 h-3.5 text-brand-400" /> Edit & Simulate Diff
+              </button>
             </div>
           </div>
 
-          {/* Sub-nav Tabs */}
-          <div className="px-6 border-b border-slate-800 bg-surface/40 flex gap-6">
+          {/* Subheader Navigation Tabs */}
+          <div className="px-6 border-b border-slate-800 flex items-center gap-6 text-sm font-medium">
             <button
               onClick={() => setActiveTab("policies")}
-              className={`py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+              className={`py-3.5 border-b-2 transition-all flex items-center gap-2 ${
                 activeTab === "policies"
-                  ? "border-brand-500 text-brand-400"
-                  : "border-transparent text-slate-400 hover:text-white"
+                  ? "border-brand-500 text-white font-semibold"
+                  : "border-transparent text-slate-400 hover:text-slate-200"
               }`}
             >
-              <ShieldCheck className="w-4 h-4" /> Active Policy Assignments ({assignments.length})
+              <ShieldCheck className="w-4 h-4" /> Active Policies ({assignments.length})
             </button>
             <button
               onClick={() => setActiveTab("timeline")}
-              className={`py-3 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+              className={`py-3.5 border-b-2 transition-all flex items-center gap-2 ${
                 activeTab === "timeline"
-                  ? "border-cyan-500 text-cyan-400"
-                  : "border-transparent text-slate-400 hover:text-white"
+                  ? "border-brand-500 text-white font-semibold"
+                  : "border-transparent text-slate-400 hover:text-slate-200"
               }`}
             >
-              <History className="w-4 h-4" /> Chronological Timeline & Audits ({timeline?.totalEvents || 0})
+              <History className="w-4 h-4" /> Chronological Timeline
             </button>
           </div>
 
-          {/* Tab 1: Policies Matrix */}
+          {/* Tab Content: Policies */}
           {activeTab === "policies" && (
-            <div className="p-6 space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {assignments.map((asgn) => (
-                  <div
-                    key={asgn.id}
-                    className="p-5 rounded-2xl bg-surface-raised/40 border border-slate-800 hover:border-slate-700 transition-all flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                          {asgn.categoryName}
-                        </span>
-                        <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-brand-400 border border-brand-500/20">
-                          {asgn.cardinality}
-                        </span>
-                      </div>
-                      <h3 className="text-base font-bold text-white mb-2">{asgn.policyName}</h3>
-                      <div className="text-xs text-slate-400 space-y-1 font-mono">
-                        <div>Effective: <span className="text-emerald-400">{asgn.effectiveFrom}</span></div>
-                        {asgn.effectiveTo && <div>Until: <span className="text-rose-400">{asgn.effectiveTo}</span></div>}
-                      </div>
-                    </div>
-
-                    <div className="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between">
-                      <span className="text-xs text-slate-500 font-mono">Rule v{asgn.sourceRuleVersion}</span>
-                      <button
-                        onClick={() =>
-                          setInspectPolicy({ id: asgn.policyId, name: asgn.policyName })
-                        }
-                        className="flex items-center gap-1.5 text-xs font-semibold text-brand-400 hover:text-brand-300 bg-brand-500/10 hover:bg-brand-500/20 px-2.5 py-1 rounded-lg transition-colors"
-                      >
-                        <Sparkles className="w-3.5 h-3.5" /> Explain Why
-                      </button>
-                    </div>
-                  </div>
-                ))}
+            <div className="p-6 space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-white">Resolved Policy Assignments</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Valid-time policies active on <span className="font-mono text-slate-200">{date}</span>
+                  </p>
+                </div>
               </div>
 
-              {assignments.length === 0 && (
-                <div className="py-16 text-center text-slate-500 text-sm">
-                  No active policy assignments found for this employee at {date}. Run reconciliation to converge policies.
+              {assignments.length === 0 ? (
+                <div className="p-8 text-center bg-surface/30 rounded-2xl border border-slate-800 text-slate-400">
+                  No active policy assignments found for this date.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {assignments.map((asgn) => (
+                    <div
+                      key={asgn.id}
+                      className="p-4 rounded-2xl bg-surface/60 border border-slate-800/80 hover:border-slate-700 transition-all flex flex-col justify-between space-y-4"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                            {asgn.categoryName}
+                          </span>
+                          <span
+                            className={`text-[10px] px-2 py-0.5 rounded font-mono font-bold ${
+                              asgn.cardinality === "ONE"
+                                ? "bg-indigo-500/10 text-indigo-300 border border-indigo-500/20"
+                                : "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20"
+                            }`}
+                          >
+                            {asgn.cardinality}
+                          </span>
+                        </div>
+                        <h4 className="text-base font-bold text-white">{asgn.policyName}</h4>
+                        <p className="text-xs text-slate-400 font-mono">
+                          Effective: {asgn.effectiveFrom} → {asgn.effectiveTo || "Present"}
+                        </p>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-800/60 flex items-center justify-between">
+                        <span className="text-xs text-slate-400 flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-brand-400" />
+                          Rule v{asgn.sourceRuleVersion}
+                        </span>
+                        <button
+                          onClick={() => setInspectPolicy({ id: asgn.policyId, name: asgn.policyName })}
+                          className="text-xs font-semibold text-brand-400 hover:text-brand-300 flex items-center gap-1 transition-colors"
+                        >
+                          Why? <ArrowUpRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
           )}
 
-          {/* Tab 2: Chronological Timeline */}
+          {/* Tab Content: Timeline */}
           {activeTab === "timeline" && timeline && (
-            <div className="p-6 space-y-6">
-              <div className="relative pl-6 border-l-2 border-slate-800 space-y-6">
-                {timeline.timeline.map((event: any) => (
-                  <div key={event.id} className="relative group">
-                    {/* Circle Indicator */}
-                    <div
-                      className={`absolute -left-[31px] top-1 w-4 h-4 rounded-full border-2 bg-background transition-colors ${
-                        event.type === "EMPLOYEE_VERSION"
-                          ? "border-brand-500 group-hover:bg-brand-500"
-                          : event.type === "POLICY_ASSIGNMENT"
-                          ? "border-emerald-500 group-hover:bg-emerald-500"
-                          : "border-cyan-500 group-hover:bg-cyan-500"
-                      }`}
-                    />
-
-                    <div className="p-4 rounded-xl bg-surface-raised/40 border border-slate-800 group-hover:border-slate-700 transition-all">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="font-bold text-white text-sm">{event.title}</span>
-                        <span className="text-xs font-mono text-slate-400">{event.effectiveAt}</span>
+            <div className="p-6 space-y-6 max-w-4xl">
+              <h3 className="text-base font-bold text-white">Unified Chronological Audit Trail</h3>
+              <div className="space-y-4 relative before:absolute before:inset-0 before:left-3.5 before:w-0.5 before:bg-slate-800">
+                {timeline.entries?.map((item: any, idx: number) => (
+                  <div key={idx} className="relative flex items-start gap-4 pl-8">
+                    <div className="absolute left-2 top-1.5 w-3.5 h-3.5 rounded-full bg-brand-500 border-2 border-background" />
+                    <div className="flex-1 p-4 rounded-xl bg-surface/60 border border-slate-800 space-y-1">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-white">{item.type}</span>
+                        <span className="font-mono text-slate-400">{item.timestamp}</span>
                       </div>
-                      <p className="text-xs text-slate-300">{event.description}</p>
+                      <p className="text-xs text-slate-300">{item.description}</p>
                     </div>
                   </div>
                 ))}
@@ -303,85 +459,354 @@ export const EmployeesView: React.FC = () => {
         </div>
       )}
 
-      {/* Edit Profile Modal */}
+      {/* Edit Profile & Simulation Diff Modal (§32) */}
       {showEditModal && selectedEmp && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="bg-surface border border-slate-700 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-5">
-            <h3 className="text-lg font-bold text-white">Relocate / Update {selectedEmp.name}</h3>
-            <p className="text-xs text-slate-400">
-              Modifying profile attributes will atomically insert a new version into the temporal store and trigger incremental scoped reconciliation.
-            </p>
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-surface border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <Edit3 className="w-5 h-5 text-brand-400" />
+                <h3 className="text-base font-bold text-white">Edit Attributes & Preview Diff</h3>
+              </div>
+              <button onClick={() => setShowEditModal(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-            <div className="space-y-4 text-xs">
-              <div>
-                <label className="text-slate-400 block mb-1 font-semibold">State / Region:</label>
-                <input
-                  type="text"
-                  value={editState}
-                  onChange={(e) => setEditState(e.target.value)}
-                  placeholder="e.g. California, New York, Ontario"
-                  className="w-full bg-surface-raised border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-brand-500"
-                />
+            <div className="p-6 overflow-y-auto space-y-6">
+              {/* Attribute Inputs */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                    State / Region
+                  </label>
+                  <input
+                    type="text"
+                    value={editState}
+                    onChange={(e) => setEditState(e.target.value)}
+                    placeholder="e.g. California or New York"
+                    className="w-full bg-background border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                    Department
+                  </label>
+                  <select
+                    value={editDept}
+                    onChange={(e) => setEditDept(e.target.value)}
+                    className="w-full bg-background border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
+                  >
+                    <option value="Engineering">Engineering</option>
+                    <option value="Finance">Finance</option>
+                    <option value="Sales">Sales</option>
+                    <option value="HR">HR</option>
+                    <option value="Legal">Legal</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                    Employment Type
+                  </label>
+                  <select
+                    value={editEmpType}
+                    onChange={(e) => setEditEmpType(e.target.value)}
+                    className="w-full bg-background border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
+                  >
+                    <option value="FULL_TIME">Full-time</option>
+                    <option value="PART_TIME">Part-time</option>
+                    <option value="CONTRACTOR">Contractor</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-3 pt-6">
+                  <input
+                    type="checkbox"
+                    id="editIsManager"
+                    checked={editIsManager}
+                    onChange={(e) => setEditIsManager(e.target.checked)}
+                    className="w-4 h-4 rounded text-brand-500 focus:ring-brand-500 bg-background border-slate-700"
+                  />
+                  <label htmlFor="editIsManager" className="text-sm font-semibold text-white">
+                    People Manager Status
+                  </label>
+                </div>
               </div>
 
-              <div>
-                <label className="text-slate-400 block mb-1 font-semibold">Department:</label>
-                <input
-                  type="text"
-                  value={editDept}
-                  onChange={(e) => setEditDept(e.target.value)}
-                  className="w-full bg-surface-raised border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-brand-500"
-                />
-              </div>
+              {/* Live Simulation Diff Box (§32) */}
+              <div className="p-4 rounded-xl bg-background border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-brand-400" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-white">
+                      Live Reconciliation Preview
+                    </h4>
+                  </div>
+                  {loadingDiff ? (
+                    <span className="text-xs text-brand-400 flex items-center gap-1 font-mono animate-pulse">
+                      <RefreshCw className="w-3 h-3 animate-spin" /> Simulating...
+                    </span>
+                  ) : simDiff ? (
+                    <span className="text-xs text-slate-400 font-mono">
+                      {simDiff.summary.added} added • {simDiff.summary.revoked} revoked • {simDiff.summary.unchanged} unchanged
+                    </span>
+                  ) : null}
+                </div>
 
-              <div>
-                <label className="text-slate-400 block mb-1 font-semibold">Employment Type:</label>
-                <select
-                  value={editEmpType}
-                  onChange={(e) => setEditEmpType(e.target.value)}
-                  className="w-full bg-surface-raised border border-slate-700 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-brand-500"
-                >
-                  <option value="FULL_TIME">FULL_TIME</option>
-                  <option value="PART_TIME">PART_TIME</option>
-                  <option value="CONTRACTOR">CONTRACTOR</option>
-                  <option value="INTERN">INTERN</option>
-                </select>
-              </div>
+                {simDiff && (
+                  <div className="space-y-2 pt-2 border-t border-slate-800/80">
+                    {simDiff.diff.toAdd?.map((item: any, i: number) => (
+                      <div key={i} className="flex items-center gap-2 text-xs text-emerald-300 bg-emerald-500/10 px-3 py-1.5 rounded-lg border border-emerald-500/20">
+                        <PlusCircle className="w-3.5 h-3.5 text-emerald-400" />
+                        <span className="font-semibold">Add:</span> Policy {item.policyId}
+                      </div>
+                    ))}
 
-              <div className="flex items-center gap-2 pt-2">
-                <input
-                  type="checkbox"
-                  id="isManagerCheckbox"
-                  checked={editIsManager}
-                  onChange={(e) => setEditIsManager(e.target.checked)}
-                  className="rounded border-slate-700 text-brand-500 focus:ring-0"
-                />
-                <label htmlFor="isManagerCheckbox" className="text-slate-300 font-semibold cursor-pointer">
-                  Is Manager / Lead
-                </label>
+                    {simDiff.diff.toRevoke?.map((item: any, i: number) => (
+                      <div key={i} className="flex items-center gap-2 text-xs text-rose-300 bg-rose-500/10 px-3 py-1.5 rounded-lg border border-rose-500/20">
+                        <MinusCircle className="w-3.5 h-3.5 text-rose-400" />
+                        <span className="font-semibold">Revoke:</span> {item.policyName || `Policy ${item.policyId}`}
+                      </div>
+                    ))}
+
+                    {simDiff.diff.toAdd?.length === 0 && simDiff.diff.toRevoke?.length === 0 && (
+                      <div className="text-xs text-slate-400 py-1">
+                        No policy changes detected for these attributes.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
-              <button
-                onClick={() => setShowEditModal(false)}
-                className="px-4 py-2 text-xs font-semibold text-slate-400 hover:text-white rounded-xl"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveEdit}
-                disabled={updating}
-                className="px-4 py-2 text-xs font-semibold bg-brand-500 hover:bg-brand-600 text-white rounded-xl shadow-lg shadow-brand-500/20 disabled:opacity-50"
-              >
-                {updating ? "Updating..." : "Save & Reconcile"}
-              </button>
+            <div className="p-4 border-t border-slate-800 bg-surface-raised/40 flex items-center justify-between">
+              <span className="text-xs text-slate-400">
+                Changes will take effect on <span className="font-mono text-slate-200">{date}</span>.
+              </span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowEditModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveEdit}
+                  disabled={updating}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-500 hover:bg-brand-400 text-white transition-all shadow-md shadow-brand-500/20 flex items-center gap-1.5"
+                >
+                  {updating ? "Applying..." : "Apply Changes"}
+                </button>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* "Why?" Modal */}
+      {/* Employee Onboarding Flow Modal (§31) */}
+      {showOnboardModal && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-3xl bg-surface border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-5 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <UserPlus className="w-5 h-5 text-brand-400" />
+                <div>
+                  <h3 className="text-base font-bold text-white">Onboard New Employee</h3>
+                  <p className="text-xs text-slate-400">
+                    Preview resulting policy assignments before confirming creation (§31)
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setShowOnboardModal(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-6">
+              {/* Form Grid */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                    Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={onboardName}
+                    onChange={(e) => setOnboardName(e.target.value)}
+                    placeholder="e.g. Rachel Adams"
+                    className="w-full bg-background border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                    Email Address *
+                  </label>
+                  <input
+                    type="email"
+                    value={onboardEmail}
+                    onChange={(e) => setOnboardEmail(e.target.value)}
+                    placeholder="e.g. rachel.adams@acme.com"
+                    className="w-full bg-background border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                    Country
+                  </label>
+                  <select
+                    value={onboardCountry}
+                    onChange={(e) => setOnboardCountry(e.target.value)}
+                    className="w-full bg-background border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
+                  >
+                    <option value="US">United States (US)</option>
+                    <option value="Canada">Canada</option>
+                    <option value="UK">United Kingdom</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                    State / Province
+                  </label>
+                  <input
+                    type="text"
+                    value={onboardState}
+                    onChange={(e) => setOnboardState(e.target.value)}
+                    placeholder="e.g. California or New York"
+                    className="w-full bg-background border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                    Department
+                  </label>
+                  <select
+                    value={onboardDept}
+                    onChange={(e) => setOnboardDept(e.target.value)}
+                    className="w-full bg-background border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
+                  >
+                    <option value="Engineering">Engineering</option>
+                    <option value="Finance">Finance</option>
+                    <option value="Sales">Sales</option>
+                    <option value="HR">HR</option>
+                    <option value="Legal">Legal</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                    Employment Type
+                  </label>
+                  <select
+                    value={onboardEmpType}
+                    onChange={(e) => setOnboardEmpType(e.target.value)}
+                    className="w-full bg-background border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500"
+                  >
+                    <option value="FULL_TIME">Full-time</option>
+                    <option value="PART_TIME">Part-time</option>
+                    <option value="CONTRACTOR">Contractor</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                    Start / Hire Date
+                  </label>
+                  <input
+                    type="date"
+                    value={onboardHireDate}
+                    onChange={(e) => setOnboardHireDate(e.target.value)}
+                    className="w-full bg-background border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-brand-500 font-mono"
+                  />
+                </div>
+
+                <div className="flex items-center gap-3 pt-6">
+                  <input
+                    type="checkbox"
+                    id="onboardIsManager"
+                    checked={onboardIsManager}
+                    onChange={(e) => setOnboardIsManager(e.target.checked)}
+                    className="w-4 h-4 rounded text-brand-500 focus:ring-brand-500 bg-background border-slate-700"
+                  />
+                  <label htmlFor="onboardIsManager" className="text-sm font-semibold text-white">
+                    People Manager Status
+                  </label>
+                </div>
+              </div>
+
+              {/* Dynamic Policy Assignment Preview (§31) */}
+              <div className="p-4 rounded-xl bg-background border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-brand-400" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-white">
+                      Computed Policy Assignments Preview
+                    </h4>
+                  </div>
+                  {loadingOnboardPreview ? (
+                    <span className="text-xs text-brand-400 flex items-center gap-1 font-mono animate-pulse">
+                      <RefreshCw className="w-3 h-3 animate-spin" /> Evaluating rules...
+                    </span>
+                  ) : onboardPreview ? (
+                    <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
+                      <Check className="w-3.5 h-3.5" /> {onboardPreview.assignments?.length} policies will be assigned
+                    </span>
+                  ) : null}
+                </div>
+
+                {onboardPreview?.assignments && (
+                  <div className="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800">
+                    {onboardPreview.assignments.map((asgn: any, i: number) => (
+                      <div
+                        key={i}
+                        className="flex items-center justify-between p-2.5 rounded-lg bg-surface/50 border border-slate-800 text-xs"
+                      >
+                        <div className="space-y-0.5">
+                          <span className="text-[10px] text-slate-400 font-mono uppercase font-bold">
+                            {asgn.categoryId}
+                          </span>
+                          <p className="font-semibold text-slate-200">Policy {asgn.policyId}</p>
+                        </div>
+                        <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                          ✓ Assigned
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-slate-800 bg-surface-raised/40 flex items-center justify-between">
+              <span className="text-xs text-slate-400">
+                No database changes occur until you confirm.
+              </span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setShowOnboardModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleConfirmOnboard}
+                  disabled={creatingEmp}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-500 hover:bg-brand-400 text-white transition-all shadow-md shadow-brand-500/20 flex items-center gap-1.5"
+                >
+                  {creatingEmp ? "Creating..." : "Confirm & Onboard"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Why Explanation Modal */}
       {inspectPolicy && selectedEmp && (
         <WhyModal
           employeeId={selectedEmp.id}

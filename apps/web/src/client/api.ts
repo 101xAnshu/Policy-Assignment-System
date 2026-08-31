@@ -16,6 +16,45 @@ export async function fetchEmployee(id: string) {
   return res.json();
 }
 
+export async function createEmployee(payload: any) {
+  const res = await fetch(`${BASE}/employees`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Failed to create employee");
+  }
+  return res.json();
+}
+
+export async function previewOnboarding(payload: any) {
+  const res = await fetch(`${BASE}/employees/preview-onboarding`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Failed to preview onboarding policies");
+  }
+  return res.json();
+}
+
+export async function previewEmployeeChange(id: string, updates: any, effectiveAt?: string) {
+  const res = await fetch(`${BASE}/employees/${id}/preview-change`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ updates, effectiveAt }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Failed to preview attribute changes");
+  }
+  return res.json();
+}
+
 export async function updateEmployee(id: string, payload: any) {
   const res = await fetch(`${BASE}/employees/${id}`, {
     method: "PATCH",
@@ -60,7 +99,33 @@ export async function createRule(payload: any) {
   return res.json();
 }
 
-export async function publishRule(ruleId: string, validFrom: string) {
+export async function previewRuleImpact(payload: any) {
+  const res = await fetch(`${BASE}/rules/preview-impact`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Failed to preview rule impact");
+  }
+  return res.json();
+}
+
+export async function previewRuleVersionImpact(ruleId: string, payload: any) {
+  const res = await fetch(`${BASE}/rules/${ruleId}/preview`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Failed to preview rule version impact");
+  }
+  return res.json();
+}
+
+export async function publishRule(ruleId: string, validFrom?: string) {
   const res = await fetch(`${BASE}/rules/${ruleId}/publish`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -172,5 +237,14 @@ export async function processTemporal(asOfDate?: string) {
     body: JSON.stringify({ asOfDate }),
   });
   if (!res.ok) throw new Error("Failed to process temporal milestones");
+  return res.json();
+}
+
+export async function verifyIncrementalSystem() {
+  const res = await fetch(`${BASE}/system/verify-incremental`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) throw new Error("Failed to run system verification");
   return res.json();
 }

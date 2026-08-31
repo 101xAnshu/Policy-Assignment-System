@@ -36,7 +36,7 @@ const KNOWN_GROUPS = ["grp-mgr", "grp-exec", "grp-oncall"];
 
 // ─── Arbitrary Generators ───────────────────────────────────────────────────
 
-const arbEmployeeContext: fc.Arbitrary<EmployeeContext> = fc.record({
+const arbEmployeeContext = fc.record({
   id: fc.uuid() as any,
   companyId: fc.uuid() as any,
   hireDate: fc.tuple(
@@ -50,30 +50,30 @@ const arbEmployeeContext: fc.Arbitrary<EmployeeContext> = fc.record({
   employmentType: fc.oneof(fc.constant("FULL_TIME" as const), fc.constant("PART_TIME" as const), fc.constant("CONTRACTOR" as const)),
   isManager: fc.boolean(),
   groupIds: fc.subarray(KNOWN_GROUPS as any[]),
-});
+}) as fc.Arbitrary<EmployeeContext>;
 
 const arbPredicate: fc.Arbitrary<Predicate> = fc.oneof(
   fc.constant<Predicate>({ type: "ALL", children: [] }),
-  fc.record<Predicate>({
-    type: fc.constant("EQUALS"),
-    field: fc.oneof(fc.constant("country"), fc.constant("state"), fc.constant("department"), fc.constant("employmentType")),
+  fc.record({
+    type: fc.constant("EQUALS" as const),
+    field: fc.oneof(fc.constant("country" as const), fc.constant("state" as const), fc.constant("department" as const), fc.constant("employmentType" as const)),
     value: fc.oneof(fc.constant("US"), fc.constant("California"), fc.constant("Engineering"), fc.constant("FULL_TIME")),
   }),
-  fc.record<Predicate>({
-    type: fc.constant("IS_MANAGER"),
+  fc.record({
+    type: fc.constant("IS_MANAGER" as const),
     value: fc.boolean(),
   }),
-  fc.record<Predicate>({
-    type: fc.constant("GROUP_MEMBER"),
+  fc.record({
+    type: fc.constant("GROUP_MEMBER" as const),
     groupId: fc.constantFrom(...KNOWN_GROUPS),
   }),
-  fc.record<Predicate>({
-    type: fc.constant("TENURE_AT_LEAST"),
+  fc.record({
+    type: fc.constant("TENURE_AT_LEAST" as const),
     durationMonths: fc.constantFrom(12, 24, 36),
   }),
-);
+) as fc.Arbitrary<Predicate>;
 
-const arbEvaluatableRule: fc.Arbitrary<EvaluatableRule> = fc.tuple(
+const arbEvaluatableRule = fc.tuple(
   fc.constantFrom(...CATEGORY_SCHEMAS),
   fc.stringMatching(/^r-[0-9a-f]{4}$/) as any,
   fc.stringMatching(/^rv-[0-9a-f]{4}$/) as any,
@@ -82,10 +82,10 @@ const arbEvaluatableRule: fc.Arbitrary<EvaluatableRule> = fc.tuple(
   arbPredicate,
   fc.integer({ min: 10, max: 100 }),
 ).map(([cat, ruleId, ruleVersionId, policyId, policyName, predicate, priority]) => ({
-  ruleId,
-  ruleVersionId,
+  ruleId: ruleId as any,
+  ruleVersionId: ruleVersionId as any,
   version: 1,
-  policyId,
+  policyId: policyId as any,
   policyName,
   categoryId: cat.id,
   categoryKey: cat.key,
@@ -95,7 +95,7 @@ const arbEvaluatableRule: fc.Arbitrary<EvaluatableRule> = fc.tuple(
   priority,
   effectiveFrom: "2024-01-01",
   effectiveTo: null,
-}));
+})) as fc.Arbitrary<EvaluatableRule>;
 
 const arbEvaluatableRules = fc.array(arbEvaluatableRule, { minLength: 1, maxLength: 10 });
 
@@ -428,14 +428,14 @@ describe("Property-Based Invariant Verification (fast-check)", () => {
 
               for (const emp of currentEmployees) {
                 const depIndex = buildDependencyIndex(currentRules);
-                const affectedCategories = new Set([targetRule.categoryId]);
+                const affectedCategories = new Set<PolicyCategoryId>([targetRule.categoryId as PolicyCategoryId]);
 
                 const scopedRules = currentRules.filter((r) => affectedCategories.has(r.categoryId));
                 const scopedRes = resolve(emp, scopedRules, at);
 
                 const currentEmpActuals = materializedAssignments.get(emp.id) ?? [];
-                const scopedActuals = currentEmpActuals.filter((a) => affectedCategories.has(a.categoryId));
-                const unscopedActuals = currentEmpActuals.filter((a) => !affectedCategories.has(a.categoryId));
+                const scopedActuals = currentEmpActuals.filter((a) => affectedCategories.has(a.categoryId as PolicyCategoryId));
+                const unscopedActuals = currentEmpActuals.filter((a) => !affectedCategories.has(a.categoryId as PolicyCategoryId));
 
                 const diff = computeDiff(scopedRes.assignments, scopedActuals, scopedRes.decisions, at);
 
