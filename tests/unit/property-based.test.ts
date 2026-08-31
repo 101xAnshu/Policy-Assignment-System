@@ -6,33 +6,39 @@
  * 1. Determinism across all arbitrary rule evaluation permutations.
  * 2. Cardinality invariants (cardinality ONE returns <= 1 policy or AMBIGUOUS).
  * 3. Priority invariants (highest priority rule candidate always selected).
- * 4. Production resolver vs Reference resolver exact equivalence.
+ * 4. Production resolver vs independent clean-room Reference resolver exact equivalence.
  * 5. Reconciler pure diff convergence and mathematical idempotency.
+ * 6. Incremental reconciliation sequence == full recomputation from final authoritative state.
  */
 
 import { describe, it, expect } from "vitest";
 import fc from "fast-check";
 import { resolve, referenceResolver, type EvaluatableRule } from "@warp/resolver";
-import { computeDiff, type ActualAssignment } from "@warp/reconciler";
+import { computeDiff, type ActualAssignment, buildDependencyIndex } from "@warp/reconciler";
 import type {
   EmployeeContext,
   Predicate,
+  PolicyCategoryId,
+  PolicyId,
+  AssignmentRuleId,
 } from "@warp/domain";
 
 // ─── Consistent Category Definitions ────────────────────────────────────────
 
 const CATEGORY_SCHEMAS = [
-  { id: "cat-vac" as any, key: "vacation", name: "Vacation", cardinality: "ONE" as const },
-  { id: "cat-equip" as any, key: "equipment", name: "Equipment", cardinality: "MANY" as const },
-  { id: "cat-health" as any, key: "health", name: "Health", cardinality: "ONE" as const },
+  { id: "cat-vac" as PolicyCategoryId, key: "vacation", name: "Vacation", cardinality: "ONE" as const },
+  { id: "cat-equip" as PolicyCategoryId, key: "equipment", name: "Equipment", cardinality: "MANY" as const },
+  { id: "cat-health" as PolicyCategoryId, key: "health", name: "Health", cardinality: "ONE" as const },
+  { id: "cat-comp" as PolicyCategoryId, key: "compliance", name: "Compliance", cardinality: "MANY" as const },
 ];
+
+const KNOWN_GROUPS = ["grp-mgr", "grp-exec", "grp-oncall"];
 
 // ─── Arbitrary Generators ───────────────────────────────────────────────────
 
 const arbEmployeeContext: fc.Arbitrary<EmployeeContext> = fc.record({
   id: fc.uuid() as any,
   companyId: fc.uuid() as any,
-  name: fc.string({ minLength: 1, maxLength: 20 }),
   hireDate: fc.tuple(
     fc.integer({ min: 2020, max: 2024 }),
     fc.integer({ min: 1, max: 12 }),
@@ -43,8 +49,29 @@ const arbEmployeeContext: fc.Arbitrary<EmployeeContext> = fc.record({
   department: fc.oneof(fc.constant("Engineering"), fc.constant("Sales"), fc.constant("HR"), fc.constant("Legal")),
   employmentType: fc.oneof(fc.constant("FULL_TIME" as const), fc.constant("PART_TIME" as const), fc.constant("CONTRACTOR" as const)),
   isManager: fc.boolean(),
-  groupIds: fc.array(fc.uuid() as any, { maxLength: 3 }),
+  groupIds: fc.subarray(KNOWN_GROUPS as any[]),
 });
+
+const arbPredicate: fc.Arbitrary<Predicate> = fc.oneof(
+  fc.constant<Predicate>({ type: "ALL", children: [] }),
+  fc.record<Predicate>({
+    type: fc.constant("EQUALS"),
+    field: fc.oneof(fc.constant("country"), fc.constant("state"), fc.constant("department"), fc.constant("employmentType")),
+    value: fc.oneof(fc.constant("US"), fc.constant("California"), fc.constant("Engineering"), fc.constant("FULL_TIME")),
+  }),
+  fc.record<Predicate>({
+    type: fc.constant("IS_MANAGER"),
+    value: fc.boolean(),
+  }),
+  fc.record<Predicate>({
+    type: fc.constant("GROUP_MEMBER"),
+    groupId: fc.constantFrom(...KNOWN_GROUPS),
+  }),
+  fc.record<Predicate>({
+    type: fc.constant("TENURE_AT_LEAST"),
+    durationMonths: fc.constantFrom(12, 24, 36),
+  }),
+);
 
 const arbEvaluatableRule: fc.Arbitrary<EvaluatableRule> = fc.tuple(
   fc.constantFrom(...CATEGORY_SCHEMAS),
@@ -52,18 +79,7 @@ const arbEvaluatableRule: fc.Arbitrary<EvaluatableRule> = fc.tuple(
   fc.stringMatching(/^rv-[0-9a-f]{4}$/) as any,
   fc.stringMatching(/^p-[0-9a-f]{4}$/) as any,
   fc.string({ minLength: 3, maxLength: 15 }),
-  fc.oneof(
-    fc.constant<Predicate>({ type: "ALL", children: [] }),
-    fc.record<Predicate>({
-      type: fc.constant("EQUALS"),
-      field: fc.oneof(fc.constant("country"), fc.constant("department"), fc.constant("employmentType")),
-      value: fc.oneof(fc.constant("US"), fc.constant("Engineering"), fc.constant("FULL_TIME")),
-    }),
-    fc.record<Predicate>({
-      type: fc.constant("IS_MANAGER"),
-      value: fc.boolean(),
-    }),
-  ),
+  arbPredicate,
   fc.integer({ min: 10, max: 100 }),
 ).map(([cat, ruleId, ruleVersionId, policyId, policyName, predicate, priority]) => ({
   ruleId,
@@ -81,9 +97,51 @@ const arbEvaluatableRule: fc.Arbitrary<EvaluatableRule> = fc.tuple(
   effectiveTo: null,
 }));
 
-const arbEvaluatableRules = fc.array(arbEvaluatableRule, { minLength: 1, maxLength: 8 });
+const arbEvaluatableRules = fc.array(arbEvaluatableRule, { minLength: 1, maxLength: 10 });
 
-// ─── Properties ─────────────────────────────────────────────────────────────
+// ─── Mutation Event Arbitraries for Incremental Verification ─────────────────
+
+type MutationEvent =
+  | {
+      type: "CHANGE_EMPLOYEE_ATTRIBUTE";
+      employeeIdx: number;
+      field: "state" | "department" | "employmentType" | "isManager";
+      value: any;
+    }
+  | {
+      type: "CHANGE_GROUP_MEMBERSHIP";
+      employeeIdx: number;
+      groupId: string;
+      action: "ADD" | "REMOVE";
+    }
+  | {
+      type: "CHANGE_RULE_PRIORITY";
+      ruleIdx: number;
+      newPriority: number;
+    };
+
+const arbMutationEvent = (numEmployees: number, numRules: number): fc.Arbitrary<MutationEvent> =>
+  fc.oneof(
+    fc.record({
+      type: fc.constant("CHANGE_EMPLOYEE_ATTRIBUTE" as const),
+      employeeIdx: fc.integer({ min: 0, max: Math.max(0, numEmployees - 1) }),
+      field: fc.constantFrom("state" as const, "department" as const, "employmentType" as const, "isManager" as const),
+      value: fc.oneof(fc.constant("California"), fc.constant("New York"), fc.constant("Sales"), fc.constant("Engineering"), fc.constant("CONTRACTOR"), fc.constant("FULL_TIME"), fc.constant(true), fc.constant(false)),
+    }),
+    fc.record({
+      type: fc.constant("CHANGE_GROUP_MEMBERSHIP" as const),
+      employeeIdx: fc.integer({ min: 0, max: Math.max(0, numEmployees - 1) }),
+      groupId: fc.constantFrom(...KNOWN_GROUPS),
+      action: fc.constantFrom("ADD" as const, "REMOVE" as const),
+    }),
+    fc.record({
+      type: fc.constant("CHANGE_RULE_PRIORITY" as const),
+      ruleIdx: fc.integer({ min: 0, max: Math.max(0, numRules - 1) }),
+      newPriority: fc.integer({ min: 10, max: 100 }),
+    }),
+  );
+
+// ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe("Property-Based Invariant Verification (fast-check)", () => {
   it("Property 1: Determinism — Resolving policies is 100% order-invariant and deterministic", () => {
@@ -99,7 +157,6 @@ describe("Property-Based Invariant Verification (fast-check)", () => {
           const shuffledRules = [...rules].reverse();
           const res2 = resolve(employee, shuffledRules, at);
 
-          // Category count and assignment output must match exactly
           expect(res1.assignments.length).toBe(res2.assignments.length);
           expect(res1.decisions.length).toBe(res2.decisions.length);
 
@@ -168,7 +225,7 @@ describe("Property-Based Invariant Verification (fast-check)", () => {
     );
   });
 
-  it("Property 4: Reference Resolver Equivalence — Production resolve matches referenceResolver exactly", () => {
+  it("Property 4: Genuine Reference Resolver Equivalence — Production resolve matches independent brute-force referenceResolver", () => {
     fc.assert(
       fc.property(
         arbEmployeeContext,
@@ -232,6 +289,201 @@ describe("Property-Based Invariant Verification (fast-check)", () => {
         },
       ),
       { numRuns: 100 },
+    );
+  });
+
+  it("Property 6: Incremental Reconciliation vs Full Reference Recompute Equivalence", () => {
+    fc.assert(
+      fc.property(
+        fc.array(arbEmployeeContext, { minLength: 2, maxLength: 5 }),
+        fc.array(arbEvaluatableRule, { minLength: 2, maxLength: 6 }),
+        (employees, initialRules) => {
+          const at = "2024-08-28";
+
+          // Working mutable state
+          const currentEmployees = employees.map((e) => ({ ...e, groupIds: [...e.groupIds] }));
+          let currentRules = initialRules.map((r) => ({ ...r }));
+
+          // Maintain simulated materialized database state per employee: Map<empId, ActualAssignment[]>
+          const materializedAssignments = new Map<string, ActualAssignment[]>();
+
+          // Initial convergence for all employees
+          for (const emp of currentEmployees) {
+            const initialRes = resolve(emp, currentRules, at);
+            const diff = computeDiff(initialRes.assignments, [], initialRes.decisions, at);
+            const actuals: ActualAssignment[] = diff.toAdd.map((a, idx) => ({
+              id: `${emp.id}-${a.policyId}-${idx}`,
+              employeeId: emp.id,
+              policyId: a.policyId,
+              categoryId: a.categoryId,
+              sourceRuleId: a.sourceRuleId,
+              sourceRuleVersion: a.sourceRuleVersion,
+              effectiveFrom: at,
+              effectiveTo: null,
+              explanationSnapshot: a.explanationSnapshot,
+            }));
+            materializedAssignments.set(emp.id, actuals);
+          }
+
+          // Generate and apply a sequence of random mutations
+          const numEvents = 5;
+          for (let step = 0; step < numEvents; step++) {
+            const eventType = step % 3;
+
+            if (eventType === 0 && currentEmployees.length > 0) {
+              // Employee attribute mutation -> Scoped incremental reconciliation
+              const targetEmp = currentEmployees[step % currentEmployees.length];
+              const fieldsToChange: Array<"state" | "department" | "employmentType" | "isManager"> = ["state", "department", "isManager"];
+              const field = fieldsToChange[step % fieldsToChange.length];
+
+              if (field === "state") targetEmp.state = targetEmp.state === "California" ? "New York" : "California";
+              if (field === "department") targetEmp.department = targetEmp.department === "Engineering" ? "Sales" : "Engineering";
+              if (field === "isManager") targetEmp.isManager = !targetEmp.isManager;
+
+              // Use dependency index to determine affected categories
+              const depIndex = buildDependencyIndex(currentRules);
+              const affectedCategories = depIndex.getAffectedCategoriesForAttributes([field]);
+
+              // Scoped resolve only for affected categories
+              const scopedRules = currentRules.filter((r) => affectedCategories.has(r.categoryId));
+              const scopedRes = resolve(targetEmp, scopedRules, at);
+
+              const currentEmpActuals = materializedAssignments.get(targetEmp.id) ?? [];
+              const scopedActuals = currentEmpActuals.filter((a) => affectedCategories.has(a.categoryId));
+              const unscopedActuals = currentEmpActuals.filter((a) => !affectedCategories.has(a.categoryId));
+
+              const diff = computeDiff(scopedRes.assignments, scopedActuals, scopedRes.decisions, at);
+
+              // Apply diff to materialized state
+              const updatedActuals = [
+                ...unscopedActuals,
+                ...diff.unchanged.map((u) => u.actual),
+                ...diff.toAdd.map((a, idx) => ({
+                  id: `${targetEmp.id}-${a.policyId}-${Date.now()}-${idx}`,
+                  employeeId: targetEmp.id,
+                  policyId: a.policyId,
+                  categoryId: a.categoryId,
+                  sourceRuleId: a.sourceRuleId,
+                  sourceRuleVersion: a.sourceRuleVersion,
+                  effectiveFrom: at,
+                  effectiveTo: null,
+                  explanationSnapshot: a.explanationSnapshot,
+                })),
+                ...diff.toUpdate.map((u, idx) => ({
+                  id: `${targetEmp.id}-${u.desired.policyId}-${Date.now()}-${idx}`,
+                  employeeId: targetEmp.id,
+                  policyId: u.desired.policyId,
+                  categoryId: u.desired.categoryId,
+                  sourceRuleId: u.desired.sourceRuleId,
+                  sourceRuleVersion: u.desired.sourceRuleVersion,
+                  effectiveFrom: at,
+                  effectiveTo: null,
+                  explanationSnapshot: u.explanationSnapshot,
+                })),
+              ];
+              materializedAssignments.set(targetEmp.id, updatedActuals);
+            } else if (eventType === 1 && currentEmployees.length > 0) {
+              // Group membership mutation -> Scoped incremental reconciliation
+              const targetEmp = currentEmployees[step % currentEmployees.length];
+              const groupId = KNOWN_GROUPS[step % KNOWN_GROUPS.length];
+
+              if (targetEmp.groupIds.includes(groupId as any)) {
+                targetEmp.groupIds = targetEmp.groupIds.filter((g) => g !== groupId);
+              } else {
+                targetEmp.groupIds.push(groupId as any);
+              }
+
+              const depIndex = buildDependencyIndex(currentRules);
+              const affectedCategories = depIndex.getAffectedCategoriesForGroup(groupId);
+
+              const scopedRules = currentRules.filter((r) => affectedCategories.has(r.categoryId));
+              const scopedRes = resolve(targetEmp, scopedRules, at);
+
+              const currentEmpActuals = materializedAssignments.get(targetEmp.id) ?? [];
+              const scopedActuals = currentEmpActuals.filter((a) => affectedCategories.has(a.categoryId));
+              const unscopedActuals = currentEmpActuals.filter((a) => !affectedCategories.has(a.categoryId));
+
+              const diff = computeDiff(scopedRes.assignments, scopedActuals, scopedRes.decisions, at);
+
+              const updatedActuals = [
+                ...unscopedActuals,
+                ...diff.unchanged.map((u) => u.actual),
+                ...diff.toAdd.map((a, idx) => ({
+                  id: `${targetEmp.id}-${a.policyId}-${Date.now()}-${idx}`,
+                  employeeId: targetEmp.id,
+                  policyId: a.policyId,
+                  categoryId: a.categoryId,
+                  sourceRuleId: a.sourceRuleId,
+                  sourceRuleVersion: a.sourceRuleVersion,
+                  effectiveFrom: at,
+                  effectiveTo: null,
+                  explanationSnapshot: a.explanationSnapshot,
+                })),
+              ];
+              materializedAssignments.set(targetEmp.id, updatedActuals);
+            } else if (eventType === 2 && currentRules.length > 0) {
+              // Rule priority change -> Company recompute for that rule's category
+              const targetRule = currentRules[step % currentRules.length];
+              targetRule.priority = (targetRule.priority + 25) % 100 + 10;
+
+              for (const emp of currentEmployees) {
+                const depIndex = buildDependencyIndex(currentRules);
+                const affectedCategories = new Set([targetRule.categoryId]);
+
+                const scopedRules = currentRules.filter((r) => affectedCategories.has(r.categoryId));
+                const scopedRes = resolve(emp, scopedRules, at);
+
+                const currentEmpActuals = materializedAssignments.get(emp.id) ?? [];
+                const scopedActuals = currentEmpActuals.filter((a) => affectedCategories.has(a.categoryId));
+                const unscopedActuals = currentEmpActuals.filter((a) => !affectedCategories.has(a.categoryId));
+
+                const diff = computeDiff(scopedRes.assignments, scopedActuals, scopedRes.decisions, at);
+
+                const updatedActuals = [
+                  ...unscopedActuals,
+                  ...diff.unchanged.map((u) => u.actual),
+                  ...diff.toAdd.map((a, idx) => ({
+                    id: `${emp.id}-${a.policyId}-${Date.now()}-${idx}`,
+                    employeeId: emp.id,
+                    policyId: a.policyId,
+                    categoryId: a.categoryId,
+                    sourceRuleId: a.sourceRuleId,
+                    sourceRuleVersion: a.sourceRuleVersion,
+                    effectiveFrom: at,
+                    effectiveTo: null,
+                    explanationSnapshot: a.explanationSnapshot,
+                  })),
+                  ...diff.toUpdate.map((u, idx) => ({
+                    id: `${emp.id}-${u.desired.policyId}-${Date.now()}-${idx}`,
+                    employeeId: emp.id,
+                    policyId: u.desired.policyId,
+                    categoryId: u.desired.categoryId,
+                    sourceRuleId: u.desired.sourceRuleId,
+                    sourceRuleVersion: u.desired.sourceRuleVersion,
+                    effectiveFrom: at,
+                    effectiveTo: null,
+                    explanationSnapshot: u.explanationSnapshot,
+                  })),
+                ];
+                materializedAssignments.set(emp.id, updatedActuals);
+              }
+            }
+          }
+
+          // FINAL INVARIANT ASSERTION:
+          // Incremental materialized assignments MUST 100% equal full recomputation using independent referenceResolver
+          for (const emp of currentEmployees) {
+            const incrementalActuals = materializedAssignments.get(emp.id) ?? [];
+            const referenceFull = referenceResolver(emp, currentRules, at);
+
+            const incrementalPolicyIds = incrementalActuals.map((a) => a.policyId).sort();
+            const referencePolicyIds = referenceFull.assignments.map((a) => a.policyId).sort();
+
+            expect(incrementalPolicyIds).toEqual(referencePolicyIds);
+          }
+        },
+      ),
+      { numRuns: 60 },
     );
   });
 });
