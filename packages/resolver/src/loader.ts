@@ -55,6 +55,7 @@ export async function loadEmployeeContextAt(
         ),
       ),
     )
+    .orderBy(sql`${employeeVersions.version} DESC`)
     .limit(1);
 
   // If no version record found for this historical date, check if employee exists

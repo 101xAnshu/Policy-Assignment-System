@@ -111,7 +111,8 @@ reconcileRoutes.post(
   "/worker/process-temporal",
   async (req: Request, res: Response) => {
     try {
-      const asOf = req.body.asOf ? new Date(req.body.asOf) : new Date();
+      const asOfParam = req.body.asOf ?? req.body.asOfDate;
+      const asOf = asOfParam ? new Date(asOfParam) : new Date();
       const result = await processDueTemporalJobs(asOf);
       res.json(result);
     } catch (err) {
