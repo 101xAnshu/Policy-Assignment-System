@@ -17,6 +17,7 @@ import { resolveRoutes } from "./routes/resolve";
 import { assignmentRoutes } from "./routes/assignments";
 import { reconcileRoutes } from "./routes/reconcile";
 import { auditRoutes } from "./routes/audit";
+import { verifyRoutes } from "./routes/verify";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -39,6 +40,7 @@ export function createApp() {
   app.use("/api", assignmentRoutes);
   app.use("/api", reconcileRoutes);
   app.use("/api", auditRoutes);
+  app.use("/api", verifyRoutes);
 
   // ─── Static Frontend Serving (Vite Build) ──────────────────────────────────
   const clientDist = path.resolve(__dirname, "../dist/client");
