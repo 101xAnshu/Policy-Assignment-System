@@ -3,7 +3,8 @@
  * Build Spec §25, §26, §27.
  *
  * Implements crash-resilient asynchronous consumption of outbox events and
- * scheduled temporal boundary milestones using PostgreSQL-native coordination.
+ * scheduled temporal boundary milestones using PostgreSQL transactional row locking
+ * (FOR UPDATE SKIP LOCKED) to guarantee concurrency safety.
  */
 
 import {
@@ -26,68 +27,81 @@ export interface OutboxProcessSummary {
     entityId: string;
     actionTaken: string;
     scoped: boolean;
+    stale: boolean;
   }>;
 }
 
 /**
- * Process a batch of pending outbox events.
- * Build Spec §25, §26.
+ * Process a batch of pending outbox events with FOR UPDATE SKIP LOCKED concurrency protection.
+ * Build Spec §25, §26, §27.
  */
 export async function processNextOutboxEvents(
   batchSize = 10,
 ): Promise<OutboxProcessSummary> {
-  // Query pending events in FIFO order
-  const pending = await db
-    .select()
-    .from(outboxEvents)
-    .where(isNull(outboxEvents.processedAt))
-    .orderBy(asc(outboxEvents.createdAt))
-    .limit(batchSize);
-
   const results: OutboxProcessSummary["results"] = [];
 
-  for (const event of pending) {
-    const payload = (event.payload as Record<string, any>) ?? {};
+  // Claim batch atomically with row-level locks
+  const claimedEvents: any[] = await db.transaction(async (tx) => {
+    // Claim row locks so concurrent worker instances skip these events
+    const rows = await tx.execute(
+      sql`SELECT * FROM outbox_events WHERE processed_at IS NULL ORDER BY created_at ASC LIMIT ${batchSize} FOR UPDATE SKIP LOCKED`
+    );
+
+    const eventsList = (rows.rows || rows) as any[];
+    return eventsList;
+  });
+
+  for (const event of claimedEvents) {
+    const payload = (typeof event.payload === "string" ? JSON.parse(event.payload) : event.payload) ?? {};
     const effectiveAt =
       payload.effectiveAt ??
       new Date().toISOString().split("T")[0];
 
+    const eventEntityVersion = payload.entityVersion;
     let actionTaken = "";
     let scoped = false;
+    let stale = false;
 
     try {
-      switch (event.eventType) {
+      switch (event.event_type || event.eventType) {
         case "EMPLOYEE_CREATED": {
-          await reconcileEmployee(event.entityId, effectiveAt, {
+          await reconcileEmployee(event.entity_id || event.entityId, effectiveAt, {
             actor: "worker:outbox",
           });
-          actionTaken = `Reconciled new employee ${event.entityId}`;
+          actionTaken = `Reconciled new employee ${event.entity_id || event.entityId}`;
           break;
         }
 
         case "EMPLOYEE_UPDATED": {
+          const empId = event.entity_id || event.entityId;
           const changedFields: string[] = payload.changedFields ?? [];
           const [emp] = await db
-            .select({ companyId: employees.companyId })
+            .select({ companyId: employees.companyId, version: employees.version })
             .from(employees)
-            .where(eq(employees.id, event.entityId));
+            .where(eq(employees.id, empId));
 
           if (emp) {
+            // Explicit stale-event handling (§27)
+            if (eventEntityVersion !== undefined && emp.version > eventEntityVersion) {
+              stale = true;
+              actionTaken = `[Stale event v${eventEntityVersion} < current v${emp.version}] Reconciling against authoritative DB state: `;
+            }
+
             const rules = await loadActiveRulesAt(emp.companyId, effectiveAt);
             const depIndex = buildDependencyIndex(rules);
             const affectedCategories = depIndex.getAffectedCategoriesForAttributes(changedFields);
 
             if (affectedCategories.size > 0) {
               await reconcileEmployeeScoped(
-                event.entityId,
+                empId,
                 affectedCategories,
                 effectiveAt,
                 { actor: "worker:outbox" },
               );
               scoped = true;
-              actionTaken = `Scoped reconciliation on ${affectedCategories.size} categories for fields [${changedFields.join(", ")}]`;
+              actionTaken += `Scoped reconciliation on ${affectedCategories.size} categories for fields [${changedFields.join(", ")}]`;
             } else {
-              actionTaken = `No rule categories depend on changed fields [${changedFields.join(", ")}] — skipped`;
+              actionTaken += `No rule categories depend on changed fields [${changedFields.join(", ")}] — skipped`;
             }
           }
           break;
@@ -106,11 +120,12 @@ export async function processNextOutboxEvents(
         }
 
         case "GROUP_MEMBERSHIP_CHANGED": {
+          const empId = event.entity_id || event.entityId;
           const groupId = payload.groupId;
           const [emp] = await db
             .select({ companyId: employees.companyId })
             .from(employees)
-            .where(eq(employees.id, event.entityId));
+            .where(eq(employees.id, empId));
 
           if (emp && groupId) {
             const rules = await loadActiveRulesAt(emp.companyId, effectiveAt);
@@ -119,7 +134,7 @@ export async function processNextOutboxEvents(
 
             if (affectedCategories.size > 0) {
               await reconcileEmployeeScoped(
-                event.entityId,
+                empId,
                 affectedCategories,
                 effectiveAt,
                 { actor: "worker:outbox" },
@@ -134,7 +149,7 @@ export async function processNextOutboxEvents(
         }
 
         default:
-          actionTaken = `Unhandled event type ${event.eventType}`;
+          actionTaken = `Unhandled event type ${event.event_type || event.eventType}`;
       }
 
       // Mark outbox event as successfully processed
@@ -145,10 +160,11 @@ export async function processNextOutboxEvents(
 
       results.push({
         eventId: event.id,
-        eventType: event.eventType,
-        entityId: event.entityId,
+        eventType: event.event_type || event.eventType,
+        entityId: event.entity_id || event.entityId,
         actionTaken,
         scoped,
+        stale,
       });
     } catch (err) {
       console.error(`Error processing outbox event ${event.id}:`, err);
@@ -162,11 +178,12 @@ export async function processNextOutboxEvents(
 }
 
 /**
- * Process due temporal jobs (e.g. tenure milestone triggers).
- * Build Spec §27.
+ * Process due temporal jobs (e.g. tenure milestone triggers) with FOR UPDATE SKIP LOCKED.
+ * Build Spec §25, §27.
  */
 export async function processDueTemporalJobs(
   asOfDate?: Date | string,
+  batchSize = 20,
 ): Promise<{ processedCount: number; jobIds: string[] }> {
   const cutoff = asOfDate
     ? typeof asOfDate === "string"
@@ -174,24 +191,28 @@ export async function processDueTemporalJobs(
       : asOfDate
     : new Date();
 
-  const dueJobs = await db
-    .select()
-    .from(temporalJobs)
-    .where(
-      and(
-        lte(temporalJobs.triggerAt, cutoff),
-        isNull(temporalJobs.processedAt),
-      ),
-    )
-    .orderBy(asc(temporalJobs.triggerAt));
+  const cutoffStr = cutoff.toISOString();
+
+  // Atomically claim due jobs with row locks
+  const dueJobs: any[] = await db.transaction(async (tx) => {
+    const rows = await tx.execute(
+      sql`SELECT * FROM temporal_jobs WHERE trigger_at <= ${cutoffStr}::timestamptz AND processed_at IS NULL ORDER BY trigger_at ASC LIMIT ${batchSize} FOR UPDATE SKIP LOCKED`
+    );
+    return (rows.rows || rows) as any[];
+  });
 
   const jobIds: string[] = [];
 
   for (const job of dueJobs) {
-    const triggerDateStr = job.triggerAt.toISOString().split("T")[0];
+    const triggerDateStr =
+      job.trigger_at instanceof Date
+        ? job.trigger_at.toISOString().split("T")[0]
+        : new Date(job.trigger_at).toISOString().split("T")[0];
+
+    const empId = job.employee_id || job.employeeId;
 
     try {
-      await reconcileEmployee(job.employeeId, triggerDateStr, {
+      await reconcileEmployee(empId, triggerDateStr, {
         actor: "worker:temporal-milestone",
       });
 

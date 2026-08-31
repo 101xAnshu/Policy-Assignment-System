@@ -15,6 +15,7 @@ import { db } from "@warp/db";
 import {
   employees,
   employeeVersions,
+  temporalJobs,
   publishOutboxEvent,
   getActiveAssignmentsAt,
 } from "@warp/db";
@@ -302,6 +303,9 @@ employeeRoutes.patch("/:id", async (req: Request, res: Response) => {
       return;
     }
 
+    const today = new Date().toISOString().split("T")[0];
+    const isFutureDated = effectiveAt > today;
+
     const result = await db.transaction(async (tx) => {
       // Load current employee
       const [current] = await tx
@@ -315,7 +319,7 @@ employeeRoutes.patch("/:id", async (req: Request, res: Response) => {
 
       const newVersion = current.version + 1;
 
-      // Close the current version's validity
+      // Close the current version's validity at effectiveAt
       await tx
         .update(employeeVersions)
         .set({ validTo: effectiveAt })
@@ -336,7 +340,7 @@ employeeRoutes.patch("/:id", async (req: Request, res: Response) => {
         hireDate: current.hireDate,
       };
 
-      // Create new version record
+      // Create new version record for the future/effective date
       await tx.insert(employeeVersions).values({
         employeeId,
         version: newVersion,
@@ -345,29 +349,57 @@ employeeRoutes.patch("/:id", async (req: Request, res: Response) => {
         ...newState,
       });
 
-      // Update current employee record
-      const [updated] = await tx
-        .update(employees)
-        .set({
-          ...sanitized,
-          version: newVersion,
-          updatedAt: new Date(),
-        })
-        .where(eq(employees.id, employeeId))
-        .returning();
+      let updated = current;
 
-      // Publish outbox event with changedFields + effectiveAt + entityVersion
-      await publishOutboxEvent(
-        {
-          eventType: "EMPLOYEE_UPDATED",
-          entityType: "EMPLOYEE",
-          entityId: employeeId,
-          payload: { changedFields, effectiveAt, entityVersion: newVersion },
-        },
-        tx,
-      );
+      if (isFutureDated) {
+        // Build Spec §21: Schedule future temporal job instead of immediate current-state reconciliation
+        await tx.insert(temporalJobs).values({
+          employeeId,
+          triggerAt: new Date(`${effectiveAt}T00:00:00.000Z`),
+          reason: `Future-dated attribute update for ${employeeId} activating at ${effectiveAt}`,
+          processedAt: null,
+        });
 
-      return { employee: updated, changedFields, effectiveAt, version: newVersion };
+        // Keep current employee attributes as-is, increment version
+        [updated] = await tx
+          .update(employees)
+          .set({
+            version: newVersion,
+            updatedAt: new Date(),
+          })
+          .where(eq(employees.id, employeeId))
+          .returning();
+      } else {
+        // Immediate update to current employee record
+        [updated] = await tx
+          .update(employees)
+          .set({
+            ...sanitized,
+            version: newVersion,
+            updatedAt: new Date(),
+          })
+          .where(eq(employees.id, employeeId))
+          .returning();
+
+        // Publish outbox event with changedFields + effectiveAt + entityVersion
+        await publishOutboxEvent(
+          {
+            eventType: "EMPLOYEE_UPDATED",
+            entityType: "EMPLOYEE",
+            entityId: employeeId,
+            payload: { changedFields, effectiveAt, entityVersion: newVersion },
+          },
+          tx,
+        );
+      }
+
+      return {
+        employee: updated,
+        changedFields,
+        effectiveAt,
+        version: newVersion,
+        isFutureDated,
+      };
     });
 
     if (!result) {
