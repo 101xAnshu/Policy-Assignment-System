@@ -40,14 +40,23 @@ export async function processNextOutboxEvents(
 ): Promise<OutboxProcessSummary> {
   const results: OutboxProcessSummary["results"] = [];
 
-  // Claim batch atomically with row-level locks
+  // Claim batch atomically: SELECT FOR UPDATE SKIP LOCKED + mark claimed_at in one transaction.
+  // This ensures the claim state is persisted before the row-level lock is released,
+  // preventing concurrent workers from independently claiming the same pending event.
   const claimedEvents: any[] = await db.transaction(async (tx) => {
-    // Claim row locks so concurrent worker instances skip these events
     const rows = await tx.execute(
-      sql`SELECT * FROM outbox_events WHERE processed_at IS NULL ORDER BY created_at ASC LIMIT ${batchSize} FOR UPDATE SKIP LOCKED`
+      sql`SELECT * FROM outbox_events WHERE processed_at IS NULL AND claimed_at IS NULL ORDER BY created_at ASC LIMIT ${batchSize} FOR UPDATE SKIP LOCKED`
     );
 
     const eventsList = (rows.rows || rows) as any[];
+
+    // Atomically mark claimed before releasing lock
+    for (const evt of eventsList) {
+      await tx.execute(
+        sql`UPDATE outbox_events SET claimed_at = NOW() WHERE id = ${evt.id}`
+      );
+    }
+
     return eventsList;
   });
 
@@ -177,6 +186,7 @@ export async function processNextOutboxEvents(
   };
 }
 
+
 /**
  * Process due temporal jobs (e.g. tenure milestone triggers) with FOR UPDATE SKIP LOCKED.
  * Build Spec §25, §27.
@@ -193,12 +203,21 @@ export async function processDueTemporalJobs(
 
   const cutoffStr = cutoff.toISOString();
 
-  // Atomically claim due jobs with row locks
+  // Atomically claim due jobs: SELECT FOR UPDATE SKIP LOCKED + mark claimed_at in one transaction.
   const dueJobs: any[] = await db.transaction(async (tx) => {
     const rows = await tx.execute(
-      sql`SELECT * FROM temporal_jobs WHERE trigger_at <= ${cutoffStr}::timestamptz AND processed_at IS NULL ORDER BY trigger_at ASC LIMIT ${batchSize} FOR UPDATE SKIP LOCKED`
+      sql`SELECT * FROM temporal_jobs WHERE trigger_at <= ${cutoffStr}::timestamptz AND processed_at IS NULL AND claimed_at IS NULL ORDER BY trigger_at ASC LIMIT ${batchSize} FOR UPDATE SKIP LOCKED`
     );
-    return (rows.rows || rows) as any[];
+    const jobsList = (rows.rows || rows) as any[];
+
+    // Atomically mark claimed before releasing lock
+    for (const job of jobsList) {
+      await tx.execute(
+        sql`UPDATE temporal_jobs SET claimed_at = NOW() WHERE id = ${job.id}`
+      );
+    }
+
+    return jobsList;
   });
 
   const jobIds: string[] = [];
@@ -232,3 +251,4 @@ export async function processDueTemporalJobs(
     jobIds,
   };
 }
+

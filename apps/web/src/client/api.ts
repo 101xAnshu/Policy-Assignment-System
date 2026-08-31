@@ -75,7 +75,7 @@ export async function fetchPolicies() {
 }
 
 export async function fetchCategories() {
-  const res = await fetch(`${BASE}/categories`);
+  const res = await fetch(`${BASE}/policy-categories`);
   if (!res.ok) throw new Error("Failed to fetch categories");
   return res.json();
 }

@@ -8,32 +8,46 @@ export default {
   theme: {
     extend: {
       colors: {
-        background: "#080c14",
-        surface: "#0f172a",
-        "surface-raised": "#1e293b",
-        "surface-highlight": "#334155",
-        brand: {
-          50: "#f5f3ff",
-          100: "#ede9fe",
-          400: "#a78bfa",
-          500: "#8b5cf6",
-          600: "#7c3aed",
-          700: "#6d28d9",
-        },
+        // Warp-inspired charcoal palette
+        background: "#1a1a1a",
+        surface: "#242424",
+        "surface-raised": "#2e2e2e",
+        "surface-highlight": "#383838",
+        border: "#3a3a3a",
+
+        // Text hierarchy
+        primary: "#e8e8e8",
+        secondary: "#888888",
+        tertiary: "#666666",
+
+        // Warm orange accent
         accent: {
-          emerald: "#10b981",
-          amber: "#f59e0b",
-          rose: "#f43f5e",
-          cyan: "#06b6d4",
-          violet: "#8b5cf6",
+          DEFAULT: "#e8772e",
+          50: "#fef3e8",
+          100: "#fce0c6",
+          200: "#f9c18d",
+          300: "#f5a054",
+          400: "#e8772e",
+          500: "#d4631a",
+          600: "#b04f14",
+          700: "#8c3d10",
+        },
+
+        // Semantic colors — used only for status
+        status: {
+          success: "#3fba6b",
+          error: "#e5484d",
+          warning: "#f5a623",
+          info: "#889096",
         },
       },
       fontFamily: {
+        heading: ["Geist", "Inter", "system-ui", "sans-serif"],
         sans: ["Inter", "system-ui", "sans-serif"],
-        mono: ["JetBrains Mono", "Fira Code", "monospace"],
+        mono: ["JetBrains Mono", "monospace"],
       },
-      animation: {
-        "pulse-subtle": "pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+      borderRadius: {
+        DEFAULT: "8px",
       },
     },
   },

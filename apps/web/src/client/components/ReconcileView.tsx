@@ -11,16 +11,15 @@ import {
 } from "../api";
 import {
   RefreshCw,
-  PlusCircle,
-  MinusCircle,
+  Plus,
+  Minus,
   CheckCircle2,
-  AlertCircle,
   Play,
   Zap,
   Clock,
   Calendar,
   Layers,
-  Sparkles,
+  User,
 } from "lucide-react";
 
 export const ReconcileView: React.FC = () => {
@@ -30,7 +29,7 @@ export const ReconcileView: React.FC = () => {
   const [diff, setDiff] = useState<any | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [executing, setExecuting] = useState<boolean>(false);
-  const [lastResult, setLastResult] = useState<any | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   // Worker status
   const [outboxEvents, setOutboxEvents] = useState<any[]>([]);
@@ -70,7 +69,7 @@ export const ReconcileView: React.FC = () => {
       const res = await previewReconcile(selectedEmpId, date);
       setDiff(res.diff);
     } catch (err: any) {
-      alert("Preview error: " + err.message);
+      console.error("Preview error:", err.message);
     } finally {
       setLoading(false);
     }
@@ -85,13 +84,15 @@ export const ReconcileView: React.FC = () => {
   const handleExecute = async () => {
     if (!selectedEmpId) return;
     setExecuting(true);
+    setStatusMessage(null);
     try {
       const res = await executeReconcile(selectedEmpId, date);
-      setLastResult(res);
+      setStatusMessage(`Reconciliation completed. ${res.added?.length || 0} added, ${res.revoked?.length || 0} revoked.`);
       await handlePreview();
       await loadWorkerStatus();
     } catch (err: any) {
-      alert("Execution error: " + err.message);
+      console.error("Execution error:", err.message);
+      setStatusMessage(`Reconciliation failed: ${err.message}`);
     } finally {
       setExecuting(false);
     }
@@ -101,13 +102,15 @@ export const ReconcileView: React.FC = () => {
     if (employees.length === 0) return;
     const companyId = employees[0].companyId;
     setExecuting(true);
+    setStatusMessage(null);
     try {
       const res = await reconcileCompany(companyId, date);
-      alert(`Company Reconciled: ${res.totalEmployees} employees processed, ${res.totalAdded} additions, ${res.totalRevoked} revocations.`);
+      setStatusMessage(`Company reconciled: ${res.totalEmployees} employees evaluated, ${res.totalAdded} additions, ${res.totalRevoked} revocations.`);
       await handlePreview();
       await loadWorkerStatus();
     } catch (err: any) {
-      alert("Reconcile error: " + err.message);
+      console.error("Reconcile error:", err.message);
+      setStatusMessage(`Company reconciliation failed: ${err.message}`);
     } finally {
       setExecuting(false);
     }
@@ -115,13 +118,15 @@ export const ReconcileView: React.FC = () => {
 
   const handleTriggerOutbox = async () => {
     setProcessingWorker(true);
+    setStatusMessage(null);
     try {
       const res = await processOutbox();
-      alert(`Outbox Worker processed: ${res.processed} events.`);
+      setStatusMessage(`Outbox processor completed: ${res.processed} events processed.`);
       await loadWorkerStatus();
       await handlePreview();
     } catch (err: any) {
-      alert("Worker error: " + err.message);
+      console.error("Worker error:", err.message);
+      setStatusMessage(`Outbox worker error: ${err.message}`);
     } finally {
       setProcessingWorker(false);
     }
@@ -129,195 +134,199 @@ export const ReconcileView: React.FC = () => {
 
   const handleTriggerTemporal = async () => {
     setProcessingWorker(true);
+    setStatusMessage(null);
     try {
       const res = await processTemporal(date);
-      alert(`Temporal Worker processed: ${res.processed} milestone jobs.`);
+      setStatusMessage(`Temporal milestone processor completed: ${res.processed} jobs processed.`);
       await loadWorkerStatus();
       await handlePreview();
     } catch (err: any) {
-      alert("Worker error: " + err.message);
+      console.error("Worker error:", err.message);
+      setStatusMessage(`Temporal worker error: ${err.message}`);
     } finally {
       setProcessingWorker(false);
     }
   };
 
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto bg-background p-6 space-y-6">
+    <div className="flex-1 flex flex-col overflow-y-auto bg-background p-5 space-y-4">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-black text-white flex items-center gap-2.5">
-            <RefreshCw className="w-6 h-6 text-brand-400" /> Reconciliation & Convergence Center
+          <h1 className="font-heading text-lg font-semibold text-primary flex items-center gap-2">
+            <RefreshCw className="w-5 h-5 text-secondary" /> Reconciliation
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
-            Compare desired deterministic policy state against live assignments, preview atomic diffs, and converge idempotently.
+          <p className="text-xs text-secondary mt-0.5">
+            Compare desired policy state against active assignments and converge idempotently
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <button
             onClick={handleCompanyReconcile}
             disabled={executing}
-            className="flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl bg-surface-raised border border-slate-700 hover:border-brand-500 text-slate-200 hover:text-white transition-colors"
+            className="px-3 py-1.5 rounded text-[13px] font-medium bg-surface-raised hover:bg-surface-highlight text-primary border border-border transition-colors flex items-center gap-1.5"
           >
-            <Sparkles className="w-4 h-4 text-cyan-400" /> Reconcile All Employees
+            <Layers className="w-3.5 h-3.5 text-secondary" /> Reconcile all
           </button>
           <button
             onClick={handleExecute}
-            disabled={executing || !diff || (!diff.toAdd.length && !diff.toRevoke.length)}
-            className="flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl bg-brand-500 hover:bg-brand-600 text-white shadow-lg shadow-brand-500/20 transition-colors disabled:opacity-50"
+            disabled={executing || !diff || (!diff.toAdd?.length && !diff.toRevoke?.length)}
+            className="px-3 py-1.5 rounded text-[13px] font-medium bg-accent hover:bg-accent-500 text-white transition-colors disabled:opacity-50 flex items-center gap-1.5"
           >
-            <Play className="w-4 h-4" /> {executing ? "Converging..." : "Execute Reconcile"}
+            <Play className="w-3.5 h-3.5" /> {executing ? "Converging..." : "Execute reconcile"}
           </button>
         </div>
       </div>
 
-      {/* Selector & Date Controls */}
-      <div className="flex flex-wrap items-center gap-4 bg-surface/60 border border-slate-800 p-4 rounded-2xl">
+      {/* Status banner */}
+      {statusMessage && (
+        <div className="p-3 rounded bg-surface border border-border text-xs text-primary flex items-center justify-between">
+          <span>{statusMessage}</span>
+          <button onClick={() => setStatusMessage(null)} className="text-secondary hover:text-primary text-[11px]">
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Target Selector & Date Controls */}
+      <div className="flex flex-wrap items-center gap-3 bg-surface border border-border p-3.5 rounded">
         <div className="flex items-center gap-2">
-          <label className="text-xs font-semibold text-slate-400 uppercase">Target Employee:</label>
+          <User className="w-3.5 h-3.5 text-secondary" />
           <select
             value={selectedEmpId}
             onChange={(e) => setSelectedEmpId(e.target.value)}
-            className="bg-surface-raised border border-slate-700 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-brand-500"
+            className="bg-surface-raised border border-border text-primary text-[13px] rounded px-2.5 py-1.5 focus:outline-none focus:border-accent"
           >
             {employees.map((emp) => (
               <option key={emp.id} value={emp.id}>
-                {emp.name} ({emp.department} • {emp.state || emp.country})
+                {emp.name} ({emp.department} · {emp.state || emp.country})
               </option>
             ))}
           </select>
         </div>
 
-        <div className="flex items-center gap-2">
-          <Calendar className="w-4 h-4 text-cyan-400" />
-          <label className="text-xs font-semibold text-slate-400 uppercase">Effective Date:</label>
+        <div className="flex items-center gap-1.5 pl-3 border-l border-border">
+          <Calendar className="w-3.5 h-3.5 text-secondary" />
+          <span className="text-xs text-secondary">Effective:</span>
           <input
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            className="bg-surface-raised border border-slate-700 text-white text-xs rounded-xl px-3 py-1.5 focus:outline-none font-mono"
+            className="bg-surface-raised border border-border text-primary text-[13px] rounded px-2.5 py-1.5 focus:outline-none focus:border-accent font-mono"
           />
         </div>
 
         <button
           onClick={handlePreview}
           disabled={loading}
-          className="flex items-center gap-1.5 text-xs font-semibold bg-surface-raised hover:bg-slate-700 text-slate-300 px-3 py-2 rounded-xl transition-colors"
+          className="ml-auto flex items-center gap-1 text-xs text-secondary hover:text-primary px-2.5 py-1.5 rounded bg-surface-raised border border-border transition-colors"
         >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Refresh Diff
+          <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} /> Refresh
         </button>
       </div>
 
       {/* Diff Overview Stats */}
       {diff && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="p-4 rounded-2xl bg-emerald-950/20 border border-emerald-500/30 flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-emerald-500/10 text-emerald-400">
-              <PlusCircle className="w-6 h-6" />
+        <div className="grid grid-cols-4 gap-3">
+          <div className="p-3.5 rounded bg-surface border border-border text-center">
+            <div className="text-xl font-heading font-semibold text-status-success font-mono">
+              +{diff.toAdd?.length || 0}
             </div>
-            <div>
-              <span className="text-2xl font-black text-white">{diff.toAdd.length}</span>
-              <p className="text-xs text-emerald-400 font-semibold uppercase tracking-wider">To Add</p>
-            </div>
+            <div className="text-[11px] text-secondary mt-0.5">To add</div>
           </div>
 
-          <div className="p-4 rounded-2xl bg-rose-950/20 border border-rose-500/30 flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-rose-500/10 text-rose-400">
-              <MinusCircle className="w-6 h-6" />
+          <div className="p-3.5 rounded bg-surface border border-border text-center">
+            <div className="text-xl font-heading font-semibold text-status-error font-mono">
+              -{diff.toRevoke?.length || 0}
             </div>
-            <div>
-              <span className="text-2xl font-black text-white">{diff.toRevoke.length}</span>
-              <p className="text-xs text-rose-400 font-semibold uppercase tracking-wider">To Revoke</p>
-            </div>
+            <div className="text-[11px] text-secondary mt-0.5">To revoke</div>
           </div>
 
-          <div className="p-4 rounded-2xl bg-amber-950/20 border border-amber-500/30 flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-amber-500/10 text-amber-400">
-              <RefreshCw className="w-6 h-6" />
+          <div className="p-3.5 rounded bg-surface border border-border text-center">
+            <div className="text-xl font-heading font-semibold text-status-warning font-mono">
+              ~{diff.toUpdate?.length || 0}
             </div>
-            <div>
-              <span className="text-2xl font-black text-white">{diff.toUpdate?.length || 0}</span>
-              <p className="text-xs text-amber-400 font-semibold uppercase tracking-wider">To Update</p>
-            </div>
+            <div className="text-[11px] text-secondary mt-0.5">To update</div>
           </div>
 
-          <div className="p-4 rounded-2xl bg-surface-raised/40 border border-slate-800 flex items-center gap-4">
-            <div className="p-3 rounded-xl bg-slate-800 text-slate-400">
-              <CheckCircle2 className="w-6 h-6" />
+          <div className="p-3.5 rounded bg-surface border border-border text-center">
+            <div className="text-xl font-heading font-semibold text-primary font-mono">
+              {diff.unchanged?.length || 0}
             </div>
-            <div>
-              <span className="text-2xl font-black text-white">{diff.unchanged.length}</span>
-              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Unchanged</p>
-            </div>
+            <div className="text-[11px] text-secondary mt-0.5">Unchanged</div>
           </div>
         </div>
       )}
 
       {/* Diff Details Breakdown */}
       {diff && (
-        <div className="space-y-4">
-          {/* Additions */}
-          {diff.toAdd.length > 0 && (
-            <div className="p-5 rounded-2xl bg-surface/60 border border-slate-800 space-y-3">
-              <h3 className="text-sm font-bold text-emerald-400 flex items-center gap-2">
-                <PlusCircle className="w-4 h-4" /> Policies To Be Assigned ({diff.toAdd.length})
+        <div className="space-y-3">
+          {diff.toAdd?.length > 0 && (
+            <div className="p-4 rounded bg-surface border border-border space-y-2">
+              <h3 className="text-xs font-medium text-status-success flex items-center gap-1.5">
+                <Plus className="w-3.5 h-3.5" /> Policies to be assigned ({diff.toAdd.length})
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {diff.toAdd.map((item: any, idx: number) => (
                   <div
                     key={idx}
-                    className="p-4 rounded-xl bg-emerald-950/15 border border-emerald-500/20 flex flex-col justify-between"
+                    className="p-3 rounded bg-background border border-border flex flex-col justify-between"
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span className="font-bold text-white text-sm">{item.policyName}</span>
-                      <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
-                        Priority: {item.sourceRulePriority || 10}
+                      <span className="font-medium text-primary text-xs">{item.policyName}</span>
+                      <span className="text-[10px] font-mono text-secondary px-1.5 py-0.5 rounded bg-surface-raised border border-border">
+                        P{item.sourceRulePriority || 10}
                       </span>
                     </div>
-                    <p className="text-xs text-slate-300">{item.reason}</p>
+                    <p className="text-[11px] text-secondary">{item.reason}</p>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Revocations */}
-          {diff.toRevoke.length > 0 && (
-            <div className="p-5 rounded-2xl bg-surface/60 border border-slate-800 space-y-3">
-              <h3 className="text-sm font-bold text-rose-400 flex items-center gap-2">
-                <MinusCircle className="w-4 h-4" /> Policies To Be Revoked ({diff.toRevoke.length})
+          {diff.toRevoke?.length > 0 && (
+            <div className="p-4 rounded bg-surface border border-border space-y-2">
+              <h3 className="text-xs font-medium text-status-error flex items-center gap-1.5">
+                <Minus className="w-3.5 h-3.5" /> Policies to be revoked ({diff.toRevoke.length})
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {diff.toRevoke.map((item: any, idx: number) => (
                   <div
                     key={idx}
-                    className="p-4 rounded-xl bg-rose-950/15 border border-rose-500/20 flex flex-col justify-between"
+                    className="p-3 rounded bg-background border border-border flex flex-col justify-between"
                   >
                     <div className="flex items-center justify-between mb-1">
-                      <span className="font-bold text-white text-sm">{item.policyName}</span>
-                      <span className="text-[10px] font-mono text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded">
-                        Revocation
+                      <span className="font-medium text-primary text-xs">{item.policyName}</span>
+                      <span className="text-[10px] font-mono text-status-error bg-status-error/10 px-1.5 py-0.5 rounded">
+                        Revoke
                       </span>
                     </div>
-                    <p className="text-xs text-slate-300">{item.reason}</p>
+                    <p className="text-[11px] text-secondary">{item.reason}</p>
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+
+          {diff.toAdd?.length === 0 && diff.toRevoke?.length === 0 && (
+            <div className="p-6 rounded bg-surface border border-border text-center text-secondary text-xs">
+              State is fully converged. No pending additions or revocations.
             </div>
           )}
         </div>
       )}
 
-      {/* Outbox & Temporal Worker Runner */}
-      <div className="p-5 rounded-2xl bg-surface-raised/40 border border-slate-800 space-y-4">
+      {/* Background Worker Queues */}
+      <div className="p-4 rounded bg-surface border border-border space-y-3">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-base font-bold text-white flex items-center gap-2">
-              <Zap className="w-4 h-4 text-amber-400" /> Background Outbox & Temporal Milestone Runner
+            <h3 className="text-sm font-medium text-primary flex items-center gap-2">
+              <Zap className="w-4 h-4 text-accent" /> Background queues
             </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Processes asynchronous event queues and future milestone evaluations.
+            <p className="text-xs text-secondary mt-0.5">
+              Asynchronous event queues and scheduled milestone jobs
             </p>
           </div>
 
@@ -325,38 +334,38 @@ export const ReconcileView: React.FC = () => {
             <button
               onClick={handleTriggerOutbox}
               disabled={processingWorker}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30 transition-colors"
+              className="px-2.5 py-1 text-xs font-medium rounded bg-surface-raised hover:bg-surface-highlight text-primary border border-border transition-colors flex items-center gap-1"
             >
-              <Zap className="w-3.5 h-3.5" /> Process Outbox Queue
+              <Zap className="w-3 h-3 text-accent" /> Process outbox
             </button>
             <button
               onClick={handleTriggerTemporal}
               disabled={processingWorker}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-xl bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 border border-cyan-500/30 transition-colors"
+              className="px-2.5 py-1 text-xs font-medium rounded bg-surface-raised hover:bg-surface-highlight text-primary border border-border transition-colors flex items-center gap-1"
             >
-              <Clock className="w-3.5 h-3.5" /> Process Due Milestones
+              <Clock className="w-3 h-3 text-secondary" /> Process milestones
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-          <div className="p-4 rounded-xl bg-surface border border-slate-800">
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-bold text-white">Outbox Events Table</span>
-              <span className="text-slate-400 font-mono">{outboxEvents.length} recorded</span>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+          <div className="p-3 rounded bg-background border border-border">
+            <div className="flex items-center justify-between mb-1">
+              <span className="font-medium text-primary">Outbox events</span>
+              <span className="text-tertiary font-mono">{outboxEvents.length} pending</span>
             </div>
-            <p className="text-slate-400">
-              Captures attribute changes and publishes domain events inside the database transaction.
+            <p className="text-secondary text-[11px]">
+              Captures transactional domain mutations for asynchronous reconciliation.
             </p>
           </div>
 
-          <div className="p-4 rounded-xl bg-surface border border-slate-800">
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-bold text-white">Temporal Milestone Jobs</span>
-              <span className="text-slate-400 font-mono">{temporalJobs.length} scheduled</span>
+          <div className="p-3 rounded bg-background border border-border">
+            <div className="flex items-center justify-between mb-1">
+              <span className="font-medium text-primary">Temporal jobs</span>
+              <span className="text-tertiary font-mono">{temporalJobs.length} scheduled</span>
             </div>
-            <p className="text-slate-400">
-              Future milestone trigger dates (e.g. Sarah Chen 24-month tenure promotion on 2026-08-28).
+            <p className="text-secondary text-[11px]">
+              Scheduled milestone triggers (e.g. 24-month tenure promotions).
             </p>
           </div>
         </div>

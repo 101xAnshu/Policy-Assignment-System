@@ -1,15 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { fetchAuditLogs, fetchEmployees, fetchPolicies } from "../api";
 import {
-  ShieldAlert,
-  Search,
+  Activity,
   Filter,
   Calendar,
   User,
-  Sparkles,
-  Layers,
-  FileCheck,
-  CheckCircle2,
+  HelpCircle,
   Clock,
 } from "lucide-react";
 import { WhyModal } from "./WhyModal";
@@ -57,29 +53,30 @@ export const AuditView: React.FC = () => {
   const selectedEmpObj = employees.find((e) => e.id === whyEmpId);
   const selectedPolObj = policies.find((p) => p.id === whyPolicyId);
 
+  const inputClass = "w-full bg-background border border-border text-primary text-[13px] rounded px-3 py-2 focus:outline-none focus:border-accent transition-colors";
+  const labelClass = "block text-xs font-medium text-secondary mb-1.5";
+
   return (
-    <div className="flex-1 flex flex-col overflow-y-auto bg-background p-6 space-y-6">
+    <div className="flex-1 flex flex-col overflow-y-auto bg-background p-5 space-y-4">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-black text-white flex items-center gap-2.5">
-          <ShieldAlert className="w-6 h-6 text-brand-400" /> Audit Log & "Why?" Inspector
+        <h1 className="font-heading text-lg font-semibold text-primary flex items-center gap-2">
+          <Activity className="w-5 h-5 text-secondary" /> Activity & audit trail
         </h1>
-        <p className="text-xs text-slate-400 mt-1">
-          Complete point-in-time audit trails with frozen decision snapshots and on-demand explainability reasoning.
+        <p className="text-xs text-secondary mt-0.5">
+          Point-in-time audit logs with frozen decision snapshots and policy explanations
         </p>
       </div>
 
-      {/* Standalone Why Inspector Playground */}
-      <div className="p-6 rounded-2xl bg-gradient-to-r from-brand-950/40 via-surface to-surface border border-brand-500/30 space-y-4">
+      {/* Standalone Policy Explanation Card */}
+      <div className="p-4 rounded bg-surface border border-border space-y-3">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-brand-500/10 text-brand-400 border border-brand-500/20">
-              <Sparkles className="w-5 h-5" />
-            </div>
+          <div className="flex items-center gap-2">
+            <HelpCircle className="w-4 h-4 text-accent" />
             <div>
-              <h2 className="text-base font-bold text-white">Live "Why?" Policy Reasoning Playground</h2>
-              <p className="text-xs text-slate-400">
-                Ask why any employee has or does not have any policy at any historical date.
+              <h2 className="text-sm font-medium text-primary">Policy explainability</h2>
+              <p className="text-xs text-secondary mt-0.5">
+                Inspect why any employee was or was not assigned a policy at any historical date
               </p>
             </div>
           </div>
@@ -87,38 +84,34 @@ export const AuditView: React.FC = () => {
           <button
             onClick={() => setShowWhyModal(true)}
             disabled={!whyEmpId || !whyPolicyId}
-            className="flex items-center gap-2 px-5 py-2.5 text-xs font-bold rounded-xl bg-brand-500 hover:bg-brand-600 text-white shadow-lg shadow-brand-500/20 transition-colors disabled:opacity-50"
+            className="px-3.5 py-1.5 rounded text-[13px] font-medium bg-accent hover:bg-accent-500 text-white transition-colors disabled:opacity-50 flex items-center gap-1.5"
           >
-            <Sparkles className="w-4 h-4" /> Explain Assignment
+            <HelpCircle className="w-3.5 h-3.5" /> Explain assignment
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1">
           <div>
-            <label className="text-xs font-semibold text-slate-400 uppercase block mb-1.5">
-              Employee:
-            </label>
+            <label className={labelClass}>Employee</label>
             <select
               value={whyEmpId}
               onChange={(e) => setWhyEmpId(e.target.value)}
-              className="w-full bg-surface-raised border border-slate-700 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-brand-500"
+              className={inputClass}
             >
               {employees.map((e) => (
                 <option key={e.id} value={e.id}>
-                  {e.name} ({e.department} • {e.state || e.country})
+                  {e.name} ({e.department} · {e.state || e.country})
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-400 uppercase block mb-1.5">
-              Target Policy:
-            </label>
+            <label className={labelClass}>Target policy</label>
             <select
               value={whyPolicyId}
               onChange={(e) => setWhyPolicyId(e.target.value)}
-              className="w-full bg-surface-raised border border-slate-700 text-white text-xs rounded-xl px-3 py-2 focus:outline-none focus:border-brand-500"
+              className={inputClass}
             >
               {policies.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -129,35 +122,33 @@ export const AuditView: React.FC = () => {
           </div>
 
           <div>
-            <label className="text-xs font-semibold text-slate-400 uppercase block mb-1.5">
-              Effective Date:
-            </label>
+            <label className={labelClass}>Effective date</label>
             <input
               type="date"
               value={whyDate}
               onChange={(e) => setWhyDate(e.target.value)}
-              className="w-full bg-surface-raised border border-slate-700 text-white text-xs rounded-xl px-3 py-2 focus:outline-none font-mono"
+              className={`${inputClass} font-mono`}
             />
           </div>
         </div>
       </div>
 
-      {/* Audit Log Table Header & Filters */}
-      <div className="flex flex-wrap items-center justify-between gap-4 bg-surface/60 border border-slate-800 p-4 rounded-2xl">
-        <div className="flex items-center gap-3">
-          <FileCheck className="w-5 h-5 text-cyan-400" />
-          <span className="font-bold text-sm text-white">Audit Trail ({events.length})</span>
+      {/* Audit Log Header & Filter */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-surface border border-border p-3 rounded">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-primary">Audit events</span>
+          <span className="text-xs font-mono text-tertiary">({events.length})</span>
         </div>
 
         <div className="flex items-center gap-2">
-          <Filter className="w-4 h-4 text-slate-400" />
-          <span className="text-xs text-slate-400 font-semibold">Event Type:</span>
+          <Filter className="w-3.5 h-3.5 text-secondary" />
+          <span className="text-xs text-secondary">Event type:</span>
           <select
             value={eventTypeFilter}
             onChange={(e) => setEventTypeFilter(e.target.value)}
-            className="bg-surface-raised border border-slate-700 text-white text-xs rounded-xl px-3 py-1.5 focus:outline-none"
+            className="bg-surface-raised border border-border text-primary text-[13px] rounded px-2.5 py-1 focus:outline-none focus:border-accent"
           >
-            <option value="ALL">All Events</option>
+            <option value="ALL">All events</option>
             <option value="POLICY_ASSIGNED">POLICY_ASSIGNED</option>
             <option value="POLICY_REVOKED">POLICY_REVOKED</option>
             <option value="EMPLOYEE_PROFILE_UPDATED">EMPLOYEE_PROFILE_UPDATED</option>
@@ -167,43 +158,43 @@ export const AuditView: React.FC = () => {
       </div>
 
       {/* Audit Events List */}
-      <div className="space-y-3">
+      <div className="space-y-2">
         {events.map((ev) => (
           <div
             key={ev.id}
-            className="p-4 rounded-2xl bg-surface-raised/40 border border-slate-800 hover:border-slate-700 transition-all space-y-2"
+            className="p-3.5 rounded bg-surface border border-border space-y-2"
           >
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2.5">
                 <span
-                  className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
+                  className={`text-[10px] font-mono font-medium px-2 py-0.5 rounded ${
                     ev.eventType === "POLICY_ASSIGNED"
-                      ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20"
+                      ? "bg-status-success/10 text-status-success"
                       : ev.eventType === "POLICY_REVOKED"
-                      ? "bg-rose-500/15 text-rose-400 border border-rose-500/20"
-                      : "bg-brand-500/15 text-brand-400 border border-brand-500/20"
+                      ? "bg-status-error/10 text-status-error"
+                      : "bg-surface-raised text-secondary border border-border"
                   }`}
                 >
                   {ev.eventType}
                 </span>
-                <span className="text-xs font-semibold text-white">
-                  Entity: {ev.entityType} ({ev.entityId})
+                <span className="text-xs text-primary font-medium">
+                  {ev.entityType} <span className="font-mono text-tertiary font-normal">({ev.entityId})</span>
                 </span>
               </div>
-              <div className="text-xs text-slate-400 font-mono flex items-center gap-2">
-                <Clock className="w-3.5 h-3.5" />
+              <div className="text-xs text-tertiary font-mono flex items-center gap-1.5">
+                <Clock className="w-3 h-3" />
                 <span>Effective: {ev.effectiveAt}</span>
               </div>
             </div>
 
-            <div className="text-xs text-slate-300 bg-surface/80 p-3 rounded-xl border border-slate-800/80 font-mono">
+            <div className="text-xs text-secondary bg-background p-2.5 rounded border border-border/60 font-mono overflow-x-auto">
               <pre className="whitespace-pre-wrap">{JSON.stringify(ev.payload, null, 2)}</pre>
             </div>
           </div>
         ))}
 
         {events.length === 0 && !loading && (
-          <div className="py-16 text-center text-slate-500 text-sm">
+          <div className="py-12 text-center text-tertiary text-xs">
             No audit records matching filter criteria.
           </div>
         )}

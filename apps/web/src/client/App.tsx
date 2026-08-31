@@ -12,7 +12,7 @@ export const App: React.FC = () => {
   const [showVerifyModal, setShowVerifyModal] = useState<boolean>(false);
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-background text-slate-100 overflow-hidden">
+    <div className="flex flex-col h-screen w-screen bg-background text-primary overflow-hidden">
       <Navbar
         currentTab={currentTab}
         onSelectTab={setCurrentTab}

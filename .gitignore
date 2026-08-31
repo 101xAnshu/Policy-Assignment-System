@@ -5,3 +5,6 @@ dist/
 .DS_Store
 coverage/
 *.txt
+.playwright-mcp/
+*audit*.md
+requirements_audit.md

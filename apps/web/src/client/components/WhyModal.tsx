@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { fetchWhy } from "../api";
-import { X, CheckCircle2, XCircle, AlertTriangle, ShieldCheck, ArrowRight } from "lucide-react";
+import { X, CheckCircle2, XCircle, AlertTriangle, HelpCircle } from "lucide-react";
 
 interface WhyModalProps {
   employeeId: string;
@@ -48,134 +48,132 @@ export const WhyModal: React.FC<WhyModalProps> = ({
     switch (status) {
       case "ASSIGNED":
         return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <CheckCircle2 className="w-3.5 h-3.5" /> Assigned (Active)
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-status-success/10 text-status-success">
+            <CheckCircle2 className="w-3 h-3" /> Assigned
           </span>
         );
       case "OVERRIDDEN":
         return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-            <AlertTriangle className="w-3.5 h-3.5" /> Overridden by Priority
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-status-warning/10 text-status-warning">
+            <AlertTriangle className="w-3 h-3" /> Overridden
           </span>
         );
       case "NO_MATCH":
         return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-slate-700/50 text-slate-400 border border-slate-600">
-            <XCircle className="w-3.5 h-3.5" /> No Rule Match
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-surface-raised text-secondary">
+            <XCircle className="w-3 h-3" /> No match
           </span>
         );
       case "AMBIGUOUS":
         return (
-          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20">
-            <AlertTriangle className="w-3.5 h-3.5" /> Ambiguous Conflict
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-status-error/10 text-status-error">
+            <AlertTriangle className="w-3 h-3" /> Ambiguous
           </span>
         );
       default:
-        return <span className="text-xs text-slate-400">{status}</span>;
+        return <span className="text-xs text-secondary">{status}</span>;
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="bg-surface border border-slate-700/80 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
+      <div className="bg-surface border border-border rounded-lg w-full max-w-2xl shadow-xl overflow-hidden flex flex-col max-h-[85vh]">
         {/* Header */}
-        <div className="px-6 py-5 border-b border-slate-800 flex items-center justify-between bg-surface-raised/40">
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-brand-500/10 border border-brand-500/20 text-brand-400">
-              <ShieldCheck className="w-5 h-5" />
-            </div>
+            <HelpCircle className="w-5 h-5 text-accent" />
             <div>
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                Policy Explainability Inspector
+              <h3 className="font-heading text-[15px] font-semibold text-primary">
+                Policy explanation
               </h3>
-              <p className="text-xs text-slate-400">
-                Reasoning why <span className="text-brand-400 font-medium">{employeeName}</span> has or does not have policy at <span className="font-mono text-slate-300">{date}</span>
+              <p className="text-xs text-secondary mt-0.5">
+                Why <span className="text-accent">{employeeName}</span> {data?.status === "ASSIGNED" ? "has" : "does not have"} this policy on <span className="font-mono">{date}</span>
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
+            className="p-1 text-secondary hover:text-primary transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="p-6 overflow-y-auto space-y-6 flex-1">
+        <div className="p-5 overflow-y-auto space-y-5 flex-1">
           {loading && (
-            <div className="flex flex-col items-center justify-center py-12 text-slate-400">
-              <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin mb-3"></div>
-              <p className="text-sm">Evaluating policy rules and dependencies...</p>
+            <div className="flex flex-col items-center justify-center py-12 text-secondary">
+              <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin mb-3"></div>
+              <p className="text-sm">Evaluating rules...</p>
             </div>
           )}
 
           {error && (
-            <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 text-sm">
+            <div className="p-3 rounded bg-status-error/10 border border-status-error/20 text-status-error text-sm">
               {error}
             </div>
           )}
 
           {data && (
             <>
-              {/* Target Policy Banner */}
-              <div className="p-4 rounded-xl bg-surface-raised border border-slate-800 flex items-center justify-between">
+              {/* Target Policy */}
+              <div className="p-4 rounded bg-surface-raised border border-border flex items-center justify-between">
                 <div>
-                  <span className="text-xs text-slate-400 font-medium uppercase tracking-wider">
+                  <span className="text-xs text-secondary">
                     {data.targetPolicy.categoryName} ({data.targetPolicy.cardinality})
                   </span>
-                  <h4 className="text-base font-bold text-white mt-0.5">
+                  <h4 className="text-sm font-medium text-primary mt-0.5">
                     {data.targetPolicy.name}
                   </h4>
                 </div>
                 <div>{getStatusBadge(data.status)}</div>
               </div>
 
-              {/* Plain language explanation */}
-              <div className="p-4 rounded-xl bg-brand-950/30 border border-brand-800/40 text-slate-200 text-sm leading-relaxed">
-                <span className="text-xs font-bold text-brand-400 uppercase tracking-wider block mb-1">
-                  Deterministic Resolution Explanation
+              {/* Explanation */}
+              <div className="p-4 rounded bg-accent/5 border border-accent/10 text-primary text-sm leading-relaxed">
+                <span className="text-xs font-medium text-accent block mb-1">
+                  Resolution explanation
                 </span>
                 {data.reason}
               </div>
 
-              {/* Rules Evaluation Breakdown */}
+              {/* Rules Breakdown */}
               <div>
-                <h5 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
-                  Evaluated Rules Breakdown ({data.ruleEvaluations.length})
+                <h5 className="text-xs font-medium text-secondary mb-3">
+                  Evaluated rules ({data.ruleEvaluations.length})
                 </h5>
-                <div className="space-y-3">
+                <div className="space-y-2">
                   {data.ruleEvaluations.map((rule: any) => (
                     <div
                       key={rule.ruleId}
-                      className={`p-4 rounded-xl border transition-all ${
+                      className={`p-4 rounded border transition-colors ${
                         rule.outcome === "WINNER"
-                          ? "bg-emerald-950/20 border-emerald-500/30"
+                          ? "bg-status-success/5 border-status-success/15"
                           : rule.outcome === "OVERRIDDEN"
-                          ? "bg-amber-950/20 border-amber-500/30"
-                          : "bg-surface-raised/40 border-slate-800"
+                          ? "bg-status-warning/5 border-status-warning/15"
+                          : "bg-surface-raised border-border"
                       }`}
                     >
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-white text-sm">
+                          <span className="font-medium text-primary text-sm">
                             {rule.ruleName}
                           </span>
-                          <span className="text-xs font-mono text-slate-400">
+                          <span className="text-xs font-mono text-secondary">
                             v{rule.ruleVersion}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-mono">
-                            Priority: {rule.priority}
+                          <span className="text-xs font-mono px-2 py-0.5 rounded bg-surface-raised border border-border text-secondary">
+                            P{rule.priority}
                           </span>
                           <span
-                            className={`text-xs px-2 py-0.5 rounded font-bold ${
+                            className={`text-xs px-2 py-0.5 rounded font-medium ${
                               rule.outcome === "WINNER"
-                                ? "bg-emerald-500/20 text-emerald-400"
+                                ? "bg-status-success/10 text-status-success"
                                 : rule.outcome === "OVERRIDDEN"
-                                ? "bg-amber-500/20 text-amber-400"
-                                : "bg-slate-800 text-slate-400"
+                                ? "bg-status-warning/10 text-status-warning"
+                                : "bg-surface-raised text-secondary"
                             }`}
                           >
                             {rule.outcome}
@@ -184,16 +182,16 @@ export const WhyModal: React.FC<WhyModalProps> = ({
                       </div>
 
                       {/* Conditions */}
-                      <div className="space-y-1.5 mt-3 pt-2 border-t border-slate-800/80 text-xs">
+                      <div className="space-y-1 mt-2 pt-2 border-t border-border/50 text-xs">
                         {rule.matchedConditions.map((cond: string, idx: number) => (
-                          <div key={idx} className="flex items-center gap-2 text-emerald-400">
-                            <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                          <div key={idx} className="flex items-center gap-2 text-status-success">
+                            <CheckCircle2 className="w-3 h-3 flex-shrink-0" />
                             <span>{cond}</span>
                           </div>
                         ))}
                         {rule.failedConditions.map((cond: string, idx: number) => (
-                          <div key={idx} className="flex items-center gap-2 text-rose-400">
-                            <XCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                          <div key={idx} className="flex items-center gap-2 text-status-error">
+                            <XCircle className="w-3 h-3 flex-shrink-0" />
                             <span>{cond}</span>
                           </div>
                         ))}
@@ -207,10 +205,10 @@ export const WhyModal: React.FC<WhyModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-800 bg-surface-raised/40 flex justify-end">
+        <div className="px-5 py-3 border-t border-border flex justify-end">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-xl transition-colors"
+            className="px-3 py-1.5 text-[13px] font-medium text-secondary hover:text-primary bg-surface-raised hover:bg-surface-highlight rounded border border-border transition-colors"
           >
             Close
           </button>

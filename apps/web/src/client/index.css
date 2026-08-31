@@ -4,44 +4,71 @@
 
 @layer base {
   :root {
-    --color-bg: #080c14;
-    --color-surface: #0f172a;
-    --color-surface-raised: #1e293b;
-    --color-border: #334155;
+    --color-bg: #1a1a1a;
+    --color-surface: #242424;
+    --color-surface-raised: #2e2e2e;
+    --color-border: #3a3a3a;
+    --color-accent: #e8772e;
+    --color-text-primary: #e8e8e8;
+    --color-text-secondary: #888888;
   }
 
   body {
     background-color: var(--color-bg);
-    color: #f1f5f9;
+    color: var(--color-text-primary);
     font-family: "Inter", system-ui, -apple-system, sans-serif;
   }
 
-  /* Custom scrollbars */
+  /* Subtle scrollbars */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
   }
   ::-webkit-scrollbar-track {
-    background: #0f172a;
+    background: var(--color-surface);
   }
   ::-webkit-scrollbar-thumb {
-    background: #334155;
+    background: #444;
     border-radius: 3px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #475569;
+    background: #555;
   }
 }
 
-/* React Flow custom styling */
+/* React Flow overrides */
 .react-flow__background {
-  background-color: #080c14 !important;
+  background-color: var(--color-bg) !important;
 }
 
 .react-flow__handle {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: #8b5cf6;
-  border: 2px solid #0f172a;
+  background: var(--color-accent);
+  border: 2px solid var(--color-surface);
+}
+
+.react-flow__controls {
+  background: var(--color-surface-raised) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: 8px !important;
+}
+
+.react-flow__controls button {
+  background: var(--color-surface-raised) !important;
+  border-color: var(--color-border) !important;
+  fill: var(--color-text-secondary) !important;
+}
+
+.react-flow__controls button:hover {
+  background: var(--color-surface) !important;
+  fill: var(--color-text-primary) !important;
+}
+
+.react-flow__minimap {
+  background: var(--color-surface) !important;
+  border: 1px solid var(--color-border) !important;
+  border-radius: 8px !important;
+  overflow: hidden !important;
 }

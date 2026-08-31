@@ -4,15 +4,9 @@ import {
   ShieldCheck,
   CheckCircle2,
   XCircle,
-  AlertTriangle,
   RefreshCw,
-  Zap,
   Play,
-  Cpu,
-  Layers,
-  Check,
   X,
-  Code2,
 } from "lucide-react";
 
 interface VerifyModalProps {
@@ -38,186 +32,174 @@ export const VerifyModal: React.FC<VerifyModalProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-3xl bg-surface border border-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+      <div className="w-full max-w-2xl bg-surface border border-border rounded-lg shadow-xl overflow-hidden flex flex-col max-h-[85vh]">
         {/* Header */}
-        <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-surface-raised/30">
+        <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/20 border border-emerald-400/30">
-              <ShieldCheck className="w-5 h-5 text-white" />
-            </div>
+            <ShieldCheck className="w-5 h-5 text-accent" />
             <div>
-              <h3 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
-                System Correctness & Incremental Equivalence Verifier
-                <span className="text-[10px] font-mono uppercase bg-emerald-500/10 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/20">
-                  Build Spec §41
-                </span>
+              <h3 className="font-heading text-[15px] font-semibold text-primary">
+                System verification
               </h3>
-              <p className="text-xs text-slate-400">
-                Mathematically proves incremental scoped reconciliation == full clean-room recomputation
+              <p className="text-xs text-secondary mt-0.5">
+                Verifies incremental reconciliation matches independent recomputation
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors">
-            <X className="w-5 h-5" />
+          <button onClick={onClose} className="text-secondary hover:text-primary transition-colors p-1">
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto space-y-6">
+        <div className="p-5 overflow-y-auto flex-1 space-y-5">
           {!report && !running && (
-            <div className="p-8 text-center space-y-4 bg-background/50 rounded-2xl border border-slate-800">
-              <Cpu className="w-12 h-12 text-brand-400 mx-auto opacity-80" />
-              <div className="space-y-1 max-w-md mx-auto">
-                <h4 className="text-sm font-bold text-white">Automated System Invariant Proof</h4>
-                <p className="text-xs text-slate-400 leading-relaxed">
-                  Generates a randomized scenario sequence (30 synthetic employees, 10 rules, 50 random mutations:
-                  relocations, department transfers, group changes) and verifies that scoped incremental diffs
-                  yield identical state to an independent brute-force reference recomputation.
+            <div className="py-10 text-center space-y-4">
+              <ShieldCheck className="w-10 h-10 text-secondary mx-auto" />
+              <div className="space-y-1.5 max-w-md mx-auto">
+                <h4 className="text-sm font-medium text-primary">Automated invariant verification</h4>
+                <p className="text-xs text-secondary leading-relaxed">
+                  Generates 30 synthetic employees, 10 rules, and applies 50 randomized mutations.
+                  Verifies that scoped incremental diffs produce identical state to a brute-force
+                  reference recomputation.
                 </p>
               </div>
               <button
                 onClick={handleRunVerify}
-                className="px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-400 text-white text-xs font-bold transition-all shadow-lg shadow-brand-500/25 inline-flex items-center gap-2"
+                className="px-4 py-2 rounded bg-accent hover:bg-accent-500 text-white text-[13px] font-medium transition-colors inline-flex items-center gap-2"
               >
-                <Play className="w-4 h-4 fill-white" /> Run Verification Engine
+                <Play className="w-3.5 h-3.5" /> Run verification
               </button>
             </div>
           )}
 
           {running && (
-            <div className="p-12 text-center space-y-4">
-              <RefreshCw className="w-8 h-8 animate-spin mx-auto text-brand-400" />
+            <div className="py-12 text-center space-y-3">
+              <RefreshCw className="w-6 h-6 animate-spin mx-auto text-accent" />
               <div className="space-y-1">
-                <h4 className="text-sm font-bold text-white">Running 50 Mutation Scenarios...</h4>
-                <p className="text-xs text-slate-400 font-mono">
-                  Evaluating incremental scoped diffs vs independent reference resolver
+                <h4 className="text-sm font-medium text-primary">Running 50 mutation scenarios...</h4>
+                <p className="text-xs text-secondary">
+                  Evaluating incremental diffs vs independent reference resolver
                 </p>
               </div>
             </div>
           )}
 
           {error && (
-            <div className="p-4 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-300 text-xs flex items-center gap-2">
-              <XCircle className="w-4 h-4 text-rose-400" />
+            <div className="p-3 rounded bg-status-error/10 border border-status-error/20 text-status-error text-xs flex items-center gap-2">
+              <XCircle className="w-4 h-4" />
               <span>{error}</span>
             </div>
           )}
 
           {report && (
-            <div className="space-y-6">
+            <div className="space-y-5">
               {/* Verdict Banner */}
               <div
-                className={`p-4 rounded-2xl border flex items-center justify-between ${
+                className={`p-4 rounded border flex items-center justify-between ${
                   report.equality
-                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300"
-                    : "bg-rose-500/10 border-rose-500/30 text-rose-300"
+                    ? "bg-status-success/5 border-status-success/20"
+                    : "bg-status-error/5 border-status-error/20"
                 }`}
               >
                 <div className="flex items-center gap-3">
                   {report.equality ? (
-                    <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+                    <CheckCircle2 className="w-5 h-5 text-status-success" />
                   ) : (
-                    <XCircle className="w-6 h-6 text-rose-400" />
+                    <XCircle className="w-5 h-5 text-status-error" />
                   )}
                   <div>
-                    <h4 className="text-sm font-bold text-white">
+                    <h4 className="text-sm font-medium text-primary">
                       {report.equality
-                        ? "100% Mathematical Equivalence Verified"
-                        : "Verification Mismatch Detected"}
+                        ? "Equivalence verified"
+                        : "Mismatch detected"}
                     </h4>
-                    <p className="text-xs opacity-80">
-                      Incremental reconciliation converges strictly to clean-room reference recomputation
+                    <p className="text-xs text-secondary mt-0.5">
+                      Incremental reconciliation converges to reference recomputation
                     </p>
                   </div>
                 </div>
 
-                <span className="text-xs font-mono font-bold px-3 py-1 rounded-xl bg-surface border border-slate-700 text-slate-200">
+                <span className="text-xs font-mono text-secondary px-2 py-1 rounded bg-surface-raised border border-border">
                   {report.stats.executionTimeMs}ms
                 </span>
               </div>
 
               {/* Stats Grid */}
-              <div className="grid grid-cols-4 gap-3 text-center">
-                <div className="p-3 rounded-xl bg-surface-raised/40 border border-slate-800">
-                  <div className="text-lg font-bold text-white font-mono">{report.stats.totalEmployees}</div>
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Employees</div>
-                </div>
-                <div className="p-3 rounded-xl bg-surface-raised/40 border border-slate-800">
-                  <div className="text-lg font-bold text-white font-mono">{report.stats.totalEventsApplied}</div>
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Mutations</div>
-                </div>
-                <div className="p-3 rounded-xl bg-surface-raised/40 border border-slate-800">
-                  <div className="text-lg font-bold text-emerald-400 font-mono">
-                    {report.stats.incrementalAssignmentsCount}
+              <div className="grid grid-cols-4 gap-3">
+                {[
+                  { value: report.stats.totalEmployees, label: "Employees" },
+                  { value: report.stats.totalEventsApplied, label: "Mutations" },
+                  { value: report.stats.incrementalAssignmentsCount, label: "Incremental" },
+                  { value: report.stats.fullRecomputeAssignmentsCount, label: "Full recompute" },
+                ].map((stat) => (
+                  <div key={stat.label} className="p-3 rounded bg-surface-raised border border-border text-center">
+                    <div className="text-lg font-heading font-semibold text-primary font-mono">{stat.value}</div>
+                    <div className="text-[11px] text-secondary mt-0.5">{stat.label}</div>
                   </div>
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Incremental Asgns</div>
-                </div>
-                <div className="p-3 rounded-xl bg-surface-raised/40 border border-slate-800">
-                  <div className="text-lg font-bold text-emerald-400 font-mono">
-                    {report.stats.fullRecomputeAssignmentsCount}
-                  </div>
-                  <div className="text-[10px] uppercase font-bold text-slate-400">Full Recompute Asgns</div>
-                </div>
+                ))}
               </div>
 
               {/* Invariants Checklist */}
-              <div className="p-4 rounded-xl bg-background border border-slate-800 space-y-2">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
-                  System Invariants Checklist
+              <div className="p-4 rounded bg-background border border-border space-y-2">
+                <h4 className="text-xs font-medium text-secondary mb-2">
+                  Invariant checks
                 </h4>
                 {Object.entries(report.invariantsVerified).map(([key, val]: any) => (
-                  <div key={key} className="flex items-center justify-between text-xs py-1 border-b border-slate-800/60 last:border-0">
-                    <span className="font-mono text-slate-300">{key}</span>
+                  <div key={key} className="flex items-center justify-between text-xs py-1 border-b border-border/50 last:border-0">
+                    <span className="text-primary">{key}</span>
                     <span
-                      className={`font-bold px-2 py-0.5 rounded text-[10px] ${
+                      className={`font-medium px-2 py-0.5 rounded text-[11px] ${
                         val === "PASS"
-                          ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
-                          : "bg-rose-500/15 text-rose-300 border border-rose-500/30"
+                          ? "bg-status-success/10 text-status-success"
+                          : "bg-status-error/10 text-status-error"
                       }`}
                     >
-                      ✓ {val}
+                      {val}
                     </span>
                   </div>
                 ))}
               </div>
 
-              {/* Sample Event Stream Trace */}
-              <div className="space-y-2">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                  <Code2 className="w-3.5 h-3.5 text-brand-400" /> Reproducible Mutation Event Sample Trace
-                </h4>
-                <div className="p-3 rounded-xl bg-background border border-slate-800 font-mono text-[11px] text-slate-300 space-y-1 max-h-36 overflow-y-auto">
-                  {report.reproducibleSampleEvents?.map((e: any, idx: number) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <span className="text-slate-500">[{String(e.step).padStart(2, "0")}]</span>
-                      <span className="text-slate-300">{e.event}</span>
-                    </div>
-                  ))}
+              {/* Sample Event Stream */}
+              {report.reproducibleSampleEvents?.length > 0 && (
+                <div className="space-y-2">
+                  <h4 className="text-xs font-medium text-secondary">
+                    Sample mutation trace
+                  </h4>
+                  <div className="p-3 rounded bg-background border border-border font-mono text-[11px] text-secondary space-y-0.5 max-h-32 overflow-y-auto">
+                    {report.reproducibleSampleEvents?.map((e: any, idx: number) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <span className="text-tertiary">[{String(e.step).padStart(2, "0")}]</span>
+                        <span className="text-primary">{e.event}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-800 bg-surface-raised/40 flex items-center justify-between">
-          <span className="text-xs text-slate-400">
-            PostgreSQL-authoritative • Zero drift • Idempotent convergence
+        <div className="px-5 py-3 border-t border-border flex items-center justify-between">
+          <span className="text-xs text-tertiary">
+            Idempotent convergence verification
           </span>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             {report && (
               <button
                 onClick={handleRunVerify}
                 disabled={running}
-                className="px-3.5 py-1.5 rounded-xl text-xs font-semibold bg-surface-raised hover:bg-slate-700 text-white border border-slate-700 transition-all flex items-center gap-1.5"
+                className="px-3 py-1.5 rounded text-[13px] font-medium bg-surface-raised hover:bg-surface-highlight text-primary border border-border transition-colors flex items-center gap-1.5"
               >
-                <RefreshCw className="w-3.5 h-3.5" /> Re-run Suite
+                <RefreshCw className="w-3.5 h-3.5" /> Re-run
               </button>
             )}
             <button
               onClick={onClose}
-              className="px-4 py-1.5 rounded-xl text-xs font-semibold bg-brand-500 hover:bg-brand-400 text-white transition-all shadow-md shadow-brand-500/20"
+              className="px-3 py-1.5 rounded text-[13px] font-medium bg-accent hover:bg-accent-500 text-white transition-colors"
             >
               Close
             </button>

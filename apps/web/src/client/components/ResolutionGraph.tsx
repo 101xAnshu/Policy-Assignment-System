@@ -6,22 +6,14 @@ import {
   MiniMap,
   type Node,
   type Edge,
-  Position,
   MarkerType,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { fetchEmployees, resolveEmployee, fetchCategories, previewEmployeeChange } from "../api";
 import {
   User,
-  ShieldCheck,
-  Filter,
-  Layers,
   Calendar,
-  Sparkles,
   CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  Info,
   MapPin,
   RefreshCw,
 } from "lucide-react";
@@ -35,11 +27,8 @@ export const ResolutionGraph: React.FC = () => {
   const [resolution, setResolution] = useState<any>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [inspectPolicy, setInspectPolicy] = useState<{ id: string; name: string } | null>(null);
-
-  // Live Simulation state (§37)
   const [simState, setSimState] = useState<string>("DEFAULT");
 
-  // Load initial employees and categories
   useEffect(() => {
     fetchEmployees().then((data) => {
       setEmployees(data);
@@ -48,7 +37,6 @@ export const ResolutionGraph: React.FC = () => {
     fetchCategories().then(setCategories);
   }, []);
 
-  // Run resolution or simulation on employee/date/state change
   const loadResolution = useCallback(async () => {
     if (!selectedEmpId) return;
     setLoading(true);
@@ -57,12 +45,7 @@ export const ResolutionGraph: React.FC = () => {
         const res = await resolveEmployee(selectedEmpId, date);
         setResolution(res);
       } else {
-        // Run simulated attribute resolution (§37)
-        const simRes = await previewEmployeeChange(
-          selectedEmpId,
-          { state: simState },
-          date,
-        );
+        const simRes = await previewEmployeeChange(selectedEmpId, { state: simState }, date);
         setResolution({
           employeeId: selectedEmpId,
           evaluationDate: date,
@@ -85,119 +68,142 @@ export const ResolutionGraph: React.FC = () => {
 
   const selectedEmployee = employees.find((e) => e.id === selectedEmpId);
 
-  // Construct React Flow Nodes and Edges
   const { nodes, edges } = useMemo(() => {
     if (!resolution || !selectedEmployee) return { nodes: [], edges: [] };
 
     const nodeList: Node[] = [];
     const edgeList: Edge[] = [];
 
-    const effectiveLocation =
-      simState !== "DEFAULT" ? simState : selectedEmployee.state || selectedEmployee.country;
+    const effectiveLocation = simState !== "DEFAULT" ? simState : selectedEmployee.state || selectedEmployee.country;
+    const isSimulated = simState !== "DEFAULT";
+    const accentColor = isSimulated ? "#f5a623" : "#e8772e";
+    const neutralBorder = "#3a3a3a";
 
-    // 1. Employee Node (X: 50, Y: 220)
+    // Employee node
     nodeList.push({
       id: "employee-root",
       position: { x: 50, y: 180 },
       data: {
         label: (
-          <div className="space-y-1">
+          <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <span className="font-bold text-sm text-white">{selectedEmployee.name}</span>
-              {simState !== "DEFAULT" && (
-                <span className="text-[9px] font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded border border-amber-500/30">
+              <div className="flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-secondary" />
+                <span className="font-heading font-semibold text-sm text-primary">{selectedEmployee.name}</span>
+              </div>
+              {isSimulated && (
+                <span className="text-[9px] font-medium bg-status-warning/15 text-status-warning px-1.5 py-0.5 rounded">
                   Simulated
                 </span>
               )}
             </div>
-            <div className="text-xs text-slate-300 flex items-center gap-1.5">
-              <MapPin className="w-3 h-3 text-brand-400" />
-              <span>Location: </span>
-              <span className={`font-semibold ${simState !== "DEFAULT" ? "text-amber-300" : "text-white"}`}>
-                {effectiveLocation}
-              </span>
+            <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs">
+              <span className="text-tertiary">dept</span>
+              <span className="text-primary">{selectedEmployee.department}</span>
+              <span className="text-tertiary">state</span>
+              <span className={isSimulated ? "text-status-warning font-medium" : "text-primary"}>{effectiveLocation}</span>
+              <span className="text-tertiary">type</span>
+              <span className="text-primary">{selectedEmployee.employmentType || "FULL_TIME"}</span>
+              {selectedEmployee.isManager && (
+                <>
+                  <span className="text-tertiary">role</span>
+                  <span className="text-primary">Manager</span>
+                </>
+              )}
             </div>
-            <div className="text-xs text-slate-400">Dept: {selectedEmployee.department}</div>
           </div>
         ),
       },
       type: "default",
       style: {
-        background:
-          simState !== "DEFAULT"
-            ? "linear-gradient(135deg, #451a03 0%, #0f172a 100%)"
-            : "linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%)",
-        color: "#fff",
-        border: simState !== "DEFAULT" ? "1px solid #f59e0b" : "1px solid #6366f1",
-        borderRadius: "16px",
-        padding: "16px",
-        width: 250,
-        boxShadow:
-          simState !== "DEFAULT"
-            ? "0 10px 25px -5px rgba(245, 158, 11, 0.2)"
-            : "0 10px 25px -5px rgba(99, 102, 241, 0.2)",
+        background: "#242424",
+        color: "#e8e8e8",
+        border: `1px solid ${isSimulated ? "#f5a623" : neutralBorder}`,
+        borderRadius: "8px",
+        padding: "14px",
+        width: 220,
       },
     });
 
-    // 2. Category & Rules Nodes (X: 380) & Assigned Policy Nodes (X: 750)
-    let currentY = 50;
+    // Resolve node
+    const resolveY = 200;
+    nodeList.push({
+      id: "resolver",
+      position: { x: 380, y: resolveY },
+      data: {
+        label: (
+          <div className="text-center space-y-1">
+            <span className="font-heading font-semibold text-xs text-accent">Resolve</span>
+            <div className="text-[10px] text-tertiary">
+              one per slot · priority wins
+            </div>
+          </div>
+        ),
+      },
+      style: {
+        background: "#2e2e2e",
+        color: "#e8e8e8",
+        border: `1px solid ${accentColor}`,
+        borderRadius: "8px",
+        padding: "10px 16px",
+        width: 150,
+      },
+    });
+
+    // Edge from employee to resolver
+    edgeList.push({
+      id: "e-emp-resolver",
+      source: "employee-root",
+      target: "resolver",
+      style: { stroke: accentColor, strokeWidth: 1.5 },
+      markerEnd: { type: MarkerType.ArrowClosed, color: accentColor, width: 12, height: 12 },
+    });
+
+    // Category decisions → assignment nodes
+    let currentY = 30;
+    const assignmentPolicies: any[] = [];
 
     (resolution.decisions || []).forEach((dec: any) => {
       const catId = `cat-${dec.categoryId}`;
-      const isOne = dec.cardinality === "ONE";
       const isAmbiguous = dec.status === "AMBIGUOUS";
-      const isEmpty = dec.status === "EMPTY";
 
-      // Category / Decision Node
+      // Category rule node — connecting to resolver
       nodeList.push({
         id: catId,
-        position: { x: 380, y: currentY },
+        position: { x: 580, y: currentY },
         data: {
           label: (
-            <div className="space-y-1">
+            <div className="space-y-0.5">
               <div className="flex items-center justify-between">
-                <span className="font-bold text-xs uppercase tracking-wider text-slate-300">
-                  {dec.categoryKey}
-                </span>
-                <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
-                  {dec.cardinality || (isOne ? "ONE" : "MANY")}
+                <span className="font-medium text-xs text-primary">{dec.categoryKey}</span>
+                <span className="text-[9px] font-mono text-tertiary px-1 py-0.5 rounded bg-background border border-border">
+                  {dec.cardinality || "ONE"}
                 </span>
               </div>
-              <p className="text-xs text-slate-400 line-clamp-1">{dec.reason}</p>
+              <p className="text-[10px] text-tertiary truncate">{dec.reason}</p>
             </div>
           ),
         },
         style: {
-          background: "#0f172a",
-          color: "#fff",
-          border: isAmbiguous
-            ? "1px solid #f43f5e"
-            : isOne
-            ? "1px solid #8b5cf6"
-            : "1px solid #06b6d4",
-          borderRadius: "14px",
-          padding: "12px",
-          width: 280,
+          background: "#242424",
+          color: "#e8e8e8",
+          border: `1px solid ${isAmbiguous ? "#e5484d" : neutralBorder}`,
+          borderRadius: "8px",
+          padding: "10px 12px",
+          width: 220,
         },
       });
 
-      // Edge from Employee to Category
+      // Edge from resolver to category
       edgeList.push({
-        id: `e-emp-${catId}`,
-        source: "employee-root",
+        id: `e-resolver-${catId}`,
+        source: "resolver",
         target: catId,
-        animated: true,
-        style: {
-          stroke: simState !== "DEFAULT" ? "#f59e0b" : "#6366f1",
-          strokeWidth: 1.5,
-        },
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-          color: simState !== "DEFAULT" ? "#f59e0b" : "#6366f1",
-        },
+        style: { stroke: neutralBorder, strokeWidth: 1 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: neutralBorder, width: 10, height: 10 },
       });
 
-      // Policy Nodes for this Category
+      // Policy assignment nodes
       const matchingAssignments = (resolution.assignments || []).filter(
         (a: any) => a.categoryId === dec.categoryId,
       );
@@ -206,56 +212,53 @@ export const ResolutionGraph: React.FC = () => {
         const noPolicyId = `no-policy-${dec.categoryId}`;
         nodeList.push({
           id: noPolicyId,
-          position: { x: 740, y: currentY + 5 },
-          data: { label: isAmbiguous ? "⚠️ Ambiguous Conflict" : "None Assigned" },
+          position: { x: 860, y: currentY + 5 },
+          data: { label: isAmbiguous ? "Ambiguous conflict" : "None assigned" },
           style: {
-            background: isAmbiguous ? "#4c0519" : "#1e293b",
-            color: isAmbiguous ? "#fda4af" : "#94a3b8",
-            border: isAmbiguous ? "1px solid #f43f5e" : "1px dashed #475569",
-            borderRadius: "12px",
-            padding: "8px 14px",
-            width: 230,
-            fontSize: "12px",
-            fontWeight: isAmbiguous ? 700 : 400,
+            background: isAmbiguous ? "#3a2020" : "#2e2e2e",
+            color: isAmbiguous ? "#e5484d" : "#666",
+            border: isAmbiguous ? "1px solid #e5484d" : "1px dashed #3a3a3a",
+            borderRadius: "8px",
+            padding: "8px 12px",
+            width: 170,
+            fontSize: "11px",
           },
         });
-
         edgeList.push({
           id: `e-${catId}-${noPolicyId}`,
           source: catId,
           target: noPolicyId,
-          style: { stroke: isAmbiguous ? "#f43f5e" : "#475569", strokeDasharray: "4,4" },
+          style: { stroke: isAmbiguous ? "#e5484d" : "#3a3a3a", strokeDasharray: "4,4" },
         });
       } else {
         matchingAssignments.forEach((asgn: any, pIdx: number) => {
           const policyNodeId = `policy-${asgn.policyId}`;
-          const isWinnerCandidate = dec.winner?.policyId === asgn.policyId;
+          assignmentPolicies.push(asgn);
 
           nodeList.push({
             id: policyNodeId,
-            position: { x: 740, y: currentY + pIdx * 65 },
+            position: { x: 860, y: currentY + pIdx * 55 },
             data: {
               label: (
                 <div className="flex items-center justify-between">
                   <div>
-                    <div className="font-bold text-xs text-white">Policy {asgn.policyId}</div>
-                    <div className="text-[10px] text-emerald-300 font-mono">
-                      Rule {asgn.sourceRuleId} (v{asgn.sourceRuleVersion})
+                    <div className="text-xs font-medium text-primary">{asgn.policyName || `Policy ${asgn.policyId}`}</div>
+                    <div className="text-[10px] text-tertiary font-mono">
+                      v{asgn.sourceRuleVersion}
                     </div>
                   </div>
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                  <CheckCircle2 className="w-3 h-3 text-status-success flex-shrink-0" />
                 </div>
               ),
             },
             style: {
-              background: "linear-gradient(135deg, #064e3b 0%, #0f172a 100%)",
-              color: "#34d399",
-              border: "1px solid #10b981",
-              borderRadius: "12px",
-              padding: "10px 14px",
-              width: 240,
+              background: "#242424",
+              color: "#e8e8e8",
+              border: `1px solid ${accentColor}`,
+              borderRadius: "8px",
+              padding: "8px 12px",
+              width: 200,
               cursor: "pointer",
-              boxShadow: "0 4px 15px -2px rgba(16, 185, 129, 0.15)",
             },
           });
 
@@ -263,126 +266,106 @@ export const ResolutionGraph: React.FC = () => {
             id: `e-${catId}-${policyNodeId}`,
             source: catId,
             target: policyNodeId,
-            animated: true,
-            style: { stroke: "#10b981", strokeWidth: 2 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: "#10b981" },
+            style: { stroke: accentColor, strokeWidth: 1.5 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: accentColor, width: 10, height: 10 },
           });
         });
       }
 
-      currentY += Math.max(100, matchingAssignments.length * 75);
+      currentY += Math.max(85, matchingAssignments.length * 60);
     });
 
     return { nodes: nodeList, edges: edgeList };
   }, [resolution, selectedEmployee, simState]);
 
   return (
-    <div className="flex flex-col h-[calc(100vh-80px)] bg-background">
-      {/* Top Toolbar */}
-      <div className="px-6 py-4 border-b border-slate-800 bg-surface/80 backdrop-blur flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-4">
-          {/* Employee Selector */}
-          <div className="flex items-center gap-2">
-            <User className="w-4 h-4 text-brand-400" />
-            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              Employee:
-            </label>
+    <div className="flex flex-col flex-1 bg-background">
+      {/* Toolbar */}
+      <div className="px-5 py-3 border-b border-border bg-surface flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          {/* Employee selector */}
+          <div className="flex items-center gap-1.5">
+            <User className="w-3.5 h-3.5 text-secondary" />
             <select
               value={selectedEmpId}
-              onChange={(e) => {
-                setSelectedEmpId(e.target.value);
-                setSimState("DEFAULT");
-              }}
-              className="bg-surface-raised border border-slate-700 text-white text-sm rounded-xl px-3 py-1.5 focus:outline-none focus:border-brand-500"
+              onChange={(e) => { setSelectedEmpId(e.target.value); setSimState("DEFAULT"); }}
+              className="bg-surface-raised border border-border text-primary text-[13px] rounded px-2.5 py-1.5 focus:outline-none focus:border-accent"
             >
               {employees.map((emp) => (
                 <option key={emp.id} value={emp.id}>
-                  {emp.name} ({emp.department} • {emp.state || emp.country})
+                  {emp.name} ({emp.department} · {emp.state || emp.country})
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Interactive Simulation Preset (§37) */}
-          <div className="flex items-center gap-2 pl-3 border-l border-slate-800">
-            <Sparkles className="w-4 h-4 text-amber-400" />
-            <label className="text-xs font-semibold text-amber-300 uppercase tracking-wider">
-              Simulate Move (§37):
-            </label>
+          {/* Simulate location */}
+          <div className="flex items-center gap-1.5 pl-3 border-l border-border">
+            <MapPin className="w-3.5 h-3.5 text-secondary" />
+            <span className="text-xs text-secondary">Simulate:</span>
             <select
               value={simState}
               onChange={(e) => setSimState(e.target.value)}
-              className={`text-xs rounded-xl px-3 py-1.5 border font-semibold focus:outline-none transition-all ${
+              className={`text-[13px] rounded px-2.5 py-1.5 border focus:outline-none transition-colors ${
                 simState !== "DEFAULT"
-                  ? "bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-md shadow-amber-500/10"
-                  : "bg-surface-raised text-slate-300 border-slate-700 hover:text-white"
+                  ? "bg-status-warning/10 text-status-warning border-status-warning/30"
+                  : "bg-surface-raised text-secondary border-border hover:text-primary"
               }`}
             >
-              <option value="DEFAULT">Current Actual Location</option>
-              <option value="California">California (CA Vacation + Training)</option>
-              <option value="New York">New York (Std Vacation)</option>
-              <option value="Texas">Texas (Std Vacation)</option>
-              <option value="Oregon">Oregon (Std Vacation)</option>
+              <option value="DEFAULT">Current location</option>
+              <option value="California">California</option>
+              <option value="New York">New York</option>
+              <option value="Texas">Texas</option>
+              <option value="Oregon">Oregon</option>
             </select>
           </div>
 
-          {/* Point-in-time Date Picker */}
-          <div className="flex items-center gap-2 pl-3 border-l border-slate-800">
-            <Calendar className="w-4 h-4 text-cyan-400" />
-            <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-              Effective Date:
-            </label>
+          {/* Date picker */}
+          <div className="flex items-center gap-1.5 pl-3 border-l border-border">
+            <Calendar className="w-3.5 h-3.5 text-secondary" />
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="bg-surface-raised border border-slate-700 text-white text-sm rounded-xl px-3 py-1.5 focus:outline-none focus:border-cyan-500 font-mono"
+              className="bg-surface-raised border border-border text-primary text-[13px] rounded px-2.5 py-1.5 focus:outline-none focus:border-accent font-mono"
             />
           </div>
 
-          {/* Quick Scenario Preset Buttons */}
-          <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
+          {/* Quick presets */}
+          <div className="flex items-center gap-1 pl-3 border-l border-border">
             <button
               onClick={() => setDate("2024-08-28")}
-              className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${
-                date === "2024-08-28"
-                  ? "bg-brand-500/20 text-brand-300 border border-brand-500/30"
-                  : "bg-surface-raised text-slate-400 hover:text-white"
+              className={`px-2 py-1 text-xs rounded transition-colors ${
+                date === "2024-08-28" ? "bg-accent/10 text-accent" : "text-secondary hover:text-primary"
               }`}
             >
-              Hire Date (2024)
+              Hire date
             </button>
             <button
               onClick={() => setDate("2026-08-28")}
-              className={`px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${
-                date === "2026-08-28"
-                  ? "bg-cyan-500/20 text-cyan-300 border border-cyan-500/30"
-                  : "bg-surface-raised text-slate-400 hover:text-white"
+              className={`px-2 py-1 text-xs rounded transition-colors ${
+                date === "2026-08-28" ? "bg-accent/10 text-accent" : "text-secondary hover:text-primary"
               }`}
             >
-              24-Mo Tenure (2026)
+              24-month
             </button>
           </div>
         </div>
 
-        {/* Status Indicators */}
-        <div className="flex items-center gap-4 text-xs">
-          {resolution && (
-            <div className="flex items-center gap-3">
-              <span className="flex items-center gap-1.5 text-emerald-400 font-medium bg-emerald-950/40 px-2.5 py-1 rounded-lg border border-emerald-500/20">
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                {resolution.assignments?.length || 0} Policies Resolved
-              </span>
-            </div>
-          )}
-        </div>
+        {/* Status */}
+        {resolution && (
+          <div className="flex items-center gap-1.5 text-xs text-status-success">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            {resolution.assignments?.length || 0} policies resolved
+          </div>
+        )}
       </div>
 
-      {/* Main React Flow Canvas */}
+      {/* Graph Canvas */}
       <div className="flex-1 relative">
         {loading && (
-          <div className="absolute inset-0 z-10 bg-background/50 backdrop-blur-xs flex items-center justify-center">
-            <div className="w-8 h-8 border-2 border-brand-500 border-t-transparent rounded-full animate-spin"></div>
+          <div className="absolute inset-0 z-10 bg-background/60 flex items-center justify-center">
+            <RefreshCw className="w-5 h-5 animate-spin text-accent" />
           </div>
         )}
 
@@ -396,21 +379,20 @@ export const ResolutionGraph: React.FC = () => {
             }
           }}
           fitView
-          minZoom={0.2}
+          minZoom={0.3}
           maxZoom={1.5}
         >
-          <Background color="#1e293b" gap={20} size={1} />
-          <Controls className="!bg-surface-raised !border-slate-700 !fill-white" />
+          <Background color="#2e2e2e" gap={24} size={1} />
+          <Controls />
           <MiniMap
-            nodeStrokeColor="#8b5cf6"
-            nodeColor="#1e293b"
-            maskColor="rgba(8, 12, 20, 0.7)"
-            className="!bg-surface !border-slate-800 rounded-xl overflow-hidden"
+            nodeStrokeColor="#e8772e"
+            nodeColor="#2e2e2e"
+            maskColor="rgba(26, 26, 26, 0.8)"
           />
         </ReactFlow>
       </div>
 
-      {/* "Why?" Explainability Modal */}
+      {/* Why modal */}
       {inspectPolicy && selectedEmployee && (
         <WhyModal
           employeeId={selectedEmployee.id}

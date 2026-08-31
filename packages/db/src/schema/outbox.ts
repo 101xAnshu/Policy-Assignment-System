@@ -27,6 +27,7 @@ export const outboxEvents = pgTable(
     payload: jsonb("payload").notNull().default({}),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     processedAt: timestamp("processed_at", { withTimezone: true }),
+    claimedAt: timestamp("claimed_at", { withTimezone: true }),
   },
   (table) => ({
     idxOutboxUnprocessed: index("idx_outbox_unprocessed").on(table.processedAt, table.createdAt),
