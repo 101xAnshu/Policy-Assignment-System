@@ -84,11 +84,14 @@ export async function reconcileEmployeeScoped(
 
   const auditEventIds: string[] = [];
 
-  // 6. Transactionally apply diff
+  // 6. Transactionally apply diff.
+  // Never close a row at a date before its own start — that would create an
+  // inverted [effectiveFrom, effectiveTo) interval.
   if (diff.hasChanges) {
     await db.transaction(async (tx) => {
       // Revocations
       for (const rev of diff.toRevoke) {
+        if (rev.effectiveFrom > atStr) continue;
         await tx
           .update(policyAssignments)
           .set({
@@ -123,6 +126,7 @@ export async function reconcileEmployeeScoped(
 
       // Updates
       for (const upd of diff.toUpdate) {
+        if (upd.actual.effectiveFrom > atStr) continue;
         await tx
           .update(policyAssignments)
           .set({

@@ -112,8 +112,11 @@ export async function reconcileEmployee(
   // If there are changes, apply them transactionally
   if (diff.hasChanges) {
     await db.transaction(async (tx) => {
-      // 1. Process revocations: set effectiveTo = atStr
+      // 1. Process revocations: set effectiveTo = atStr.
+      // Never close a row at a date before its own start — that would
+      // create an inverted [effectiveFrom, effectiveTo) interval.
       for (const rev of diff.toRevoke) {
+        if (rev.effectiveFrom > atStr) continue;
         await tx
           .update(policyAssignments)
           .set({
@@ -148,6 +151,7 @@ export async function reconcileEmployee(
 
       // 2. Process updates (version/rule changes)
       for (const upd of diff.toUpdate) {
+        if (upd.actual.effectiveFrom > atStr) continue;
         // Close previous assignment
         await tx
           .update(policyAssignments)

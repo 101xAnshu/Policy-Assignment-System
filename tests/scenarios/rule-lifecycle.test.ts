@@ -102,7 +102,8 @@ describe("Scenario: Rule Priority & Predicate Changes", () => {
   });
 
   it("Scenario 2: Rule Predicate Expansion — Broadening Engineering Stipend to all employees", async () => {
-    const evalDate = "2024-08-28";
+    // Maya was hired 2025-01-10, so evaluate after hire (pre-hire dates 404).
+    const evalDate = "2025-06-01";
 
     // 1. Initial reconcile Maya Patel (Contractor in Finance) -> no Engineering Stipend
     await fetch(`${baseUrl}/api/employees/${IDS.maya}/reconcile`, {

@@ -189,7 +189,7 @@ Demonstrable flows (all wired to the real resolver/worker, no mocks):
 
 ## Property-Based Testing & Mathematical Invariants
 
-**20 suites, 136 tests, all passing** (`npx vitest run`): 7 unit files (78 tests), 9 integration files (52 tests), 4 scenario files (6 tests). Real Postgres + HTTP; no mocks. `fast-check` covers:
+**21 suites, 146 tests, all passing** (`npx vitest run`): 7 unit files (78 tests), 10 integration files (62 tests), 4 scenario files (6 tests). Real Postgres + HTTP; no mocks. `fast-check` covers:
 
 1. **Determinism**: order-permutation invariance (P1).
 2. **Cardinality**: `ONE` never exceeds 1 in resolver output (P2).
@@ -198,7 +198,7 @@ Demonstrable flows (all wired to the real resolver/worker, no mocks):
 5. **Reconciliation Idempotency**: re-diff of converged state is empty (P5).
 6. **Incremental-vs-Full**: scoped sequences equal full recompute for sequential in-order mutations (P6), plus the server `/system/verify-incremental` endpoint (policy-set comparison).
 
-Durability tests (`worker-durability.test.ts`, 7) prove stale-claim reclaim, lease release on failure, bounded parking, batch/company/temporal isolation, eventual retry, and replay idempotency. Versioning tests (`rule-versioning.test.ts`, 7) prove the full `POST /versions → publish(version) → outbox → reconcile` lifecycle plus stale/duplicate/invalid guards.
+Durability tests (`worker-durability.test.ts`, 7) prove stale-claim reclaim, lease release on failure, bounded parking, batch/company/temporal isolation, eventual retry, and replay idempotency. Versioning tests (`rule-versioning.test.ts`, 7) prove the full `POST /versions → publish(version) → outbox → reconcile` lifecycle plus stale/duplicate/invalid guards. Integrity tests (`temporal-integrity.test.ts`, 10) prove pre-hire emptiness, backdate rejection with history preserved, reconciler date guards, group idempotency, and a global no-inverted-intervals invariant.
 
 ---
 
@@ -223,11 +223,12 @@ Rule archetypes in seed: CA-vs-Standard priority conflict (Vacation `ONE`), tenu
 - **Vite, not Next.js**: early drafts considered Next.js, but the implementation ships Express + Vite SPA. This was kept deliberately — the API was already working in Express and a framework migration added risk without demo value. The stack above states this honestly.
 - **Cardinality is application-enforced**: overlapping `ONE` intervals are rejected on the direct-assignment route (409) and avoided by diff convergence, but there is no Postgres exclusion constraint. Concurrent writers could violate it.
 - **Reference resolver is a mirror, not an oracle**: it duplicates the production algorithm, so equivalence tests prove self-consistency.
-- **Incremental proof is bounded**: sequential, in-order mutations at fixed dates. Duplicate/out-of-order/concurrent delivery is handled by idempotent converge + lease/retry mechanics and covered by durability tests, but not by randomized adversarial generators.
+- **Incremental proof is bounded**: sequential, in-order mutations at fixed dates. Crash/retry/isolation is covered by targeted durability tests, but duplicate/out-of-order/concurrent delivery has no randomized adversarial generators.
 - **Worker delivery is bounded at-least-once**: 5-minute claim leases, max 10 attempts, then rows park with `last_error`. Poison work needs operator reset (`attempts=0, claimed_at=NULL`).
 - **Rule fanout is full-company sequential** with per-employee isolation; indexed old-vs-new population filtering was deferred for correctness.
 - **Rule authoring is constrained**: single `EQUALS` or `ALL (everyone)` in the UI; `IS_MANAGER` / `GROUP_MEMBER` / `TENURE_AT_LEAST` rules exist in seed/API but have no visual builder. No OR/NOT/DSL by design.
 - **Temporal edge**: month-end tenure arithmetic (e.g. Jan 31 + 1 month) can schedule a milestone that still evaluates short; the job succeeds idempotently but the boundary fires late.
+- **Temporal guards (enforced)**: resolving before hire returns 404/empty (never fabricated state); `PATCH` with `effectiveAt` before the open version start is rejected 400 with history untouched; the reconciler never closes a row before its start; group re-add and no-op remove are idempotent (`duplicate:true`, no second event); remove with `effectiveAt` before membership start is rejected 400.
 
 ---
 
@@ -250,7 +251,7 @@ npm run db:seed
 
 ### 4. Run Test Suite
 ```bash
-# 20 suites, 136 tests (unit + integration + scenarios)
+# 21 suites, 146 tests (unit + integration + scenarios)
 npx vitest run
 ```
 

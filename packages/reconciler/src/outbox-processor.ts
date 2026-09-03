@@ -112,8 +112,11 @@ export async function processNextOutboxEvents(
 
   for (const event of claimedEvents) {
     const payload = (typeof event.payload === "string" ? JSON.parse(event.payload) : event.payload) ?? {};
+    // EMPLOYEE_CREATED carries hireDate but no effectiveAt; reconciling a
+    // future hire "today" would find no state, so evaluate at hire date.
     const effectiveAt =
       payload.effectiveAt ??
+      payload.hireDate ??
       new Date().toISOString().split("T")[0];
 
     const eventEntityVersion = payload.entityVersion;

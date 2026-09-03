@@ -25,7 +25,9 @@ Two independent checks compare incremental work against full recompute: in-memor
 
 ## Known Limitations (Deliberate, Not Fixed Here)
 
-- No DB-level `ONE` non-overlap constraint; no backdate/inversion guard beyond API validation.
+- No DB-level `ONE` non-overlap constraint; inversion is prevented by API validation plus reconciler close-guards (`temporal-integrity.test.ts` asserts the global invariant).
+- Pre-hire evaluation returns null (404/empty downstream), never the current row.
+- Out-of-order `EMPLOYEE_UPDATED` handling is stale-aware but still reconciles at the event's date; duplicate/concurrent delivery has no fuzz generators.
 - No duplicate/out-of-order/concurrent fuzz generators; crash/retry safety is covered by targeted durability tests instead.
 - Tenure month-end arithmetic can fire late (Jan 31 case).
 - `Decision.winner` for `MANY` categories is the alphabetically-first policy; per-policy snapshots patch the correct winner for storage.

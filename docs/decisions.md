@@ -61,3 +61,11 @@
 ### 15. Test-only failure hooks
 **Decision:** `failForEmployeeIds` options on `reconcileCompany` / `processDueTemporalJobs` exist only for deterministic durability tests.
 **Why:** Foreign keys make real per-employee poison hard to construct; the hooks prove isolation and retry without touching resolver semantics or production paths.
+
+### 16. Pre-hire null instead of current-row fallback
+**Decision:** `loadEmployeeContextAt` returns null when no version is valid at the date, even if the employee row exists. Callers answer 404 / "not active".
+**Why:** The fallback fabricated pre-hire assignments. Explicit emptiness is safe: resolve 404s, preview 404s, reconcile fails loudly, and company loops record one explicable failure instead of converging fiction.
+
+### 17. Reject backdated writes; never invert intervals
+**Decision:** `PATCH` rejects `effectiveAt` before the open version start (400, history untouched); group remove rejects `effectiveAt` before membership start (400); both reconcilers skip closes dated before the row's start; group re-add and empty remove are idempotent no-ops (`duplicate:true`, no event), matching duplicate-publish semantics.
+**Why:** Overlapping/inverted valid-time intervals destroy history silently. Guards at every write path plus a global `effectiveTo >= effectiveFrom` regression test keep the temporal model honest without a bitemporal redesign.

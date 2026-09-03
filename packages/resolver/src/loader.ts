@@ -57,22 +57,18 @@ export async function loadEmployeeContextAt(
     .orderBy(sql`${employeeVersions.version} DESC`)
     .limit(1);
 
-  // If no version record found for this historical date, check if employee exists
-  let empState = versionRecord;
+  // No version valid at `atDateStr` means the employee has no state at that
+  // date (e.g. pre-hire). Return null so callers answer explicitly (404 /
+  // "not active") instead of falling back to the current row, which would
+  // fabricate pre-hire assignments.
+  if (!versionRecord) {
+    return null;
+  }
+
+  const empState = versionRecord;
   let companyId: string;
 
-  if (!empState) {
-    const [currentEmp] = await db
-      .select()
-      .from(employees)
-      .where(eq(employees.id, employeeId));
-
-    if (!currentEmp) {
-      return null;
-    }
-    empState = currentEmp as any;
-    companyId = currentEmp.companyId;
-  } else {
+  {
     // Get companyId from employees record
     const [currentEmp] = await db
       .select({ companyId: employees.companyId })

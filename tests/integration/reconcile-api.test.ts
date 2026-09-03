@@ -162,23 +162,26 @@ describe("Reconciliation API & Convergence", () => {
   });
 
   it("POST /api/companies/:id/reconcile reconciles all company employees idempotently", async () => {
+    // 2025-06-01 is after every hire date (Maya hired 2025-01-10); company
+    // reconciliation at pre-hire dates explicitly skips employees with no state.
     const res = await fetch(`${baseUrl}/api/companies/${IDS.acme}/reconcile`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ at: "2024-08-28" }),
+      body: JSON.stringify({ at: "2025-06-01" }),
     });
 
     expect(res.status).toBe(200);
     const result = (await res.json()) as any;
 
     expect(result.totalEmployees).toBe(4);
+    expect(result.failedCount).toBe(0);
     expect(result.employeeResults).toHaveLength(4);
 
     // Second company run is completely idempotent
     const rerun = await fetch(`${baseUrl}/api/companies/${IDS.acme}/reconcile`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ at: "2024-08-28" }),
+      body: JSON.stringify({ at: "2025-06-01" }),
     });
 
     const rerunResult = (await rerun.json()) as any;

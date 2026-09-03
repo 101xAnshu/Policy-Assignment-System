@@ -316,6 +316,26 @@ employeeRoutes.patch("/:id", async (req: Request, res: Response) => {
         return null;
       }
 
+      // Guard against backdated writes: effectiveAt must not precede the
+      // currently-open version's validFrom, otherwise versions would overlap
+      // or invert and destroy history.
+      const [openVersion] = await tx
+        .select({ validFrom: employeeVersions.validFrom })
+        .from(employeeVersions)
+        .where(
+          and(
+            eq(employeeVersions.employeeId, employeeId),
+            isNull(employeeVersions.validTo),
+          ),
+        );
+
+      if (openVersion && effectiveAt < openVersion.validFrom) {
+        return {
+          error: `effectiveAt ${effectiveAt} precedes current version start ${openVersion.validFrom}`,
+          status: 400,
+        } as const;
+      }
+
       const newVersion = current.version + 1;
 
       // Close the current version's validity at effectiveAt
@@ -403,6 +423,11 @@ employeeRoutes.patch("/:id", async (req: Request, res: Response) => {
 
     if (!result) {
       res.status(404).json({ error: "Employee not found" });
+      return;
+    }
+
+    if ("error" in result && typeof (result as any).status === "number") {
+      res.status((result as any).status).json({ error: (result as any).error });
       return;
     }
 

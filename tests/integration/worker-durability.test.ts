@@ -134,8 +134,11 @@ describe("Outbox crash recovery & bounded retry", () => {
 
 describe("Company-loop per-employee isolation & eventual retry", () => {
   it("continues past one employee failure and converges on retry (idempotent)", async () => {
+    // 2025-06-01 is after every hire date (Maya hired 2025-01-10), so all 4
+    // employees have state; pre-hire dates would explicitly fail instead.
+    const at = "2025-06-01";
     // Isolate: Sarah fails, other 3 must still succeed.
-    const partial = await reconcileCompany(IDS.acme, "2024-08-28", {
+    const partial = await reconcileCompany(IDS.acme, at, {
       actor: "test:isolation",
       failForEmployeeIds: [IDS.sarah],
     });
@@ -145,15 +148,15 @@ describe("Company-loop per-employee isolation & eventual retry", () => {
     expect(partial.employeeResults).toHaveLength(3);
 
     // Eventual retry without the fault converges everyone, including Sarah.
-    const retry = await reconcileCompany(IDS.acme, "2024-08-28", { actor: "test:retry" });
+    const retry = await reconcileCompany(IDS.acme, at, { actor: "test:retry" });
     expect(retry.failedCount).toBe(0);
     expect(retry.employeeResults).toHaveLength(4);
 
-    const sarah = await getActiveAssignmentsAt(IDS.sarah, "2024-08-28");
+    const sarah = await getActiveAssignmentsAt(IDS.sarah, at);
     expect(sarah.length).toBeGreaterThan(0);
 
     // Idempotent replay: converged state yields zero changes.
-    const replay = await reconcileCompany(IDS.acme, "2024-08-28", { actor: "test:replay" });
+    const replay = await reconcileCompany(IDS.acme, at, { actor: "test:replay" });
     expect(replay.failedCount).toBe(0);
     expect(replay.totalAdded).toBe(0);
     expect(replay.totalRevoked).toBe(0);

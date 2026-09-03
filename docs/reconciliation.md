@@ -20,6 +20,13 @@ reconcileEmployeeScoped(employeeId, categories, at) // same, restricted to categ
 
 The worker never deletes-and-reinserts. Converged state diffs to `hasChanges: false`, so `reconcileEmployee("sarah", t)` twice yields zero second-pass writes. Covered by `reconcile-api.test.ts` (single + company double-run) and property test P5.
 
+## Temporal Guards
+
+- Point-in-time loads return null before the first version (pre-hire): resolve/preview answer 404, reconcile fails explicitly.
+- `PATCH` rejects `effectiveAt` before the open version's start (400); group remove rejects `effectiveAt` before membership start (400).
+- Both apply loops skip any close dated before the row's own start, so `[effectiveFrom, effectiveTo)` can never invert.
+- `temporal-integrity.test.ts` asserts the global invariant across assignments, versions, and memberships after mixed-date operations.
+
 ## Scoped Reconciliation and Dependency Index
 
 `buildDependencyIndex(activeRules)` maps each rule's extracted dependencies to categories: employee fields (`country/state/department/employmentType/isManager`), group IDs, and a tenure flag (`packages/reconciler/src/dependency-index.ts`).
