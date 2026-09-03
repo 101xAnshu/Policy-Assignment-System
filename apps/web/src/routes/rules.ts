@@ -1,13 +1,13 @@
 /**
  * Assignment Rule API routes.
- * Build Spec §29, §34.
  *
  * GET  /api/rules                 — list all rules (with current version)
  * GET  /api/rules/:id             — get rule detail with all versions
  * POST /api/rules                 — create a new rule (as DRAFT)
- * POST /api/rules/:id/publish     — publish a new version of a rule
- * POST /api/rules/:id/preview     — preview rule impact before publishing (§34)
- * POST /api/rules/preview-impact  — preview rule impact for new/draft rule before creating (§34)
+ * POST /api/rules/:id/versions    — create a new pending version (history preserved, no reconcile yet)
+ * POST /api/rules/:id/publish     — publish an explicit version (one RULE_PUBLISHED event)
+ * POST /api/rules/:id/preview     — preview rule impact before publishing
+ * POST /api/rules/preview-impact  — preview rule impact for new/draft rule before creating
  */
 
 import { Router, type Request, type Response } from "express";
@@ -66,7 +66,7 @@ ruleRoutes.get("/", async (_req: Request, res: Response) => {
   }
 });
 
-// ─── POST /api/rules/preview-impact (§34) ────────────────────────────────────
+// ─── POST /api/rules/preview-impact ────────────────────────────────────
 
 ruleRoutes.post("/preview-impact", async (req: Request, res: Response) => {
   try {
@@ -221,7 +221,7 @@ ruleRoutes.post("/preview-impact", async (req: Request, res: Response) => {
   }
 });
 
-// ─── POST /api/rules/:id/preview (§34) ───────────────────────────────────────
+// ─── POST /api/rules/:id/preview ───────────────────────────────────────
 
 ruleRoutes.post("/:id/preview", async (req: Request, res: Response) => {
   try {
@@ -513,11 +513,113 @@ ruleRoutes.post("/", async (req: Request, res: Response) => {
   }
 });
 
+// ─── POST /api/rules/:id/versions ────────────────────────────────────────────
+// Creates a new pending version. Validates predicate, stores dependencies,
+// increments max(version)+1, preserves history. Does NOT change currentVersion
+// and emits NO outbox event — reconciliation happens on explicit publish.
+
+ruleRoutes.post("/:id/versions", async (req: Request, res: Response) => {
+  try {
+    const ruleId = req.params.id;
+    const { predicate, priority, effectiveFrom, effectiveTo, createdBy } = req.body;
+
+    if (!predicate || priority === undefined) {
+      res.status(400).json({
+        error: "Missing required fields",
+        required: ["predicate", "priority"],
+      });
+      return;
+    }
+
+    const predicateErrors = validatePredicate(predicate);
+    if (predicateErrors.length > 0) {
+      res.status(400).json({ error: "Invalid predicate", details: predicateErrors });
+      return;
+    }
+
+    const prio = Number(priority);
+    if (!Number.isInteger(prio)) {
+      res.status(400).json({ error: "Priority must be an integer" });
+      return;
+    }
+
+    const from = effectiveFrom ?? new Date().toISOString().split("T")[0];
+    if (typeof from !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(from)) {
+      res.status(400).json({ error: "effectiveFrom must be YYYY-MM-DD" });
+      return;
+    }
+    const to = effectiveTo ?? null;
+    if (to !== null && (typeof to !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(to))) {
+      res.status(400).json({ error: "effectiveTo must be YYYY-MM-DD or null" });
+      return;
+    }
+    if (to !== null && to <= from) {
+      res.status(400).json({ error: "effectiveTo must be after effectiveFrom ([from, to) half-open)" });
+      return;
+    }
+
+    const result = await db.transaction(async (tx) => {
+      const [rule] = await tx
+        .select()
+        .from(assignmentRules)
+        .where(eq(assignmentRules.id, ruleId));
+      if (!rule) return { error: "Rule not found", status: 404 } as const;
+
+      const existing = await tx
+        .select({ version: assignmentRuleVersions.version })
+        .from(assignmentRuleVersions)
+        .where(eq(assignmentRuleVersions.ruleId, ruleId));
+      const nextVersion = existing.reduce((m, r) => Math.max(m, r.version), 0) + 1;
+
+      const dependencies = extractDependencies(predicate as Predicate);
+      const [version] = await tx
+        .insert(assignmentRuleVersions)
+        .values({
+          ruleId,
+          version: nextVersion,
+          predicate,
+          priority: prio,
+          effectiveFrom: from,
+          effectiveTo: to,
+          dependencies,
+          createdBy: createdBy ?? "admin",
+        })
+        .returning();
+
+      await tx
+        .update(assignmentRules)
+        .set({ updatedAt: new Date() })
+        .where(eq(assignmentRules.id, ruleId));
+
+      return { version };
+    });
+
+    if ("error" in result && typeof (result as any).status === "number") {
+      res.status((result as any).status).json({ error: (result as any).error });
+      return;
+    }
+
+    res.status(201).json(result);
+  } catch (err) {
+    console.error("Error creating rule version:", err);
+    res.status(500).json({ error: "Failed to create rule version" });
+  }
+});
+
 // ─── POST /api/rules/:id/publish ─────────────────────────────────────────────
+// Publishes an EXPLICIT version. Duplicate publish of the current version is an
+// idempotent no-op (no second outbox event). Publishing a non-latest version
+// over a newer one is rejected with 409. Exactly one RULE_PUBLISHED per success.
 
 ruleRoutes.post("/:id/publish", async (req: Request, res: Response) => {
   try {
     const ruleId = req.params.id;
+    const requestedVersion = req.body?.version;
+
+    if (requestedVersion !== undefined && (!Number.isInteger(requestedVersion) || requestedVersion <= 0)) {
+      res.status(400).json({ error: "version must be a positive integer when provided" });
+      return;
+    }
 
     const result = await db.transaction(async (tx) => {
       const [rule] = await tx
@@ -526,25 +628,48 @@ ruleRoutes.post("/:id/publish", async (req: Request, res: Response) => {
         .where(eq(assignmentRules.id, ruleId));
 
       if (!rule) {
-        return { error: "Rule not found", status: 404 };
+        return { error: "Rule not found", status: 404 } as const;
       }
 
-      const [latestVersion] = await tx
+      const versions = await tx
         .select()
         .from(assignmentRuleVersions)
         .where(eq(assignmentRuleVersions.ruleId, ruleId))
-        .orderBy(desc(assignmentRuleVersions.version))
-        .limit(1);
+        .orderBy(desc(assignmentRuleVersions.version));
 
-      if (!latestVersion) {
-        return { error: "No version found to publish", status: 400 };
+      if (versions.length === 0) {
+        return { error: "No version found to publish", status: 400 } as const;
+      }
+
+      const latestVersion = versions[0];
+      const targetVersion =
+        requestedVersion !== undefined
+          ? versions.find((v) => v.version === requestedVersion)
+          : latestVersion;
+
+      if (!targetVersion) {
+        return { error: `Version ${requestedVersion} not found for rule`, status: 404 } as const;
+      }
+
+      // Idempotent duplicate: already publishing exactly this version.
+      if (rule.status === "ACTIVE" && rule.currentVersion === targetVersion.version) {
+        return { rule, publishedVersion: targetVersion, duplicate: true } as const;
+      }
+
+      // Prevent stale publish: only the latest version may become current
+      // (unless it is already current, handled above).
+      if (targetVersion.version !== latestVersion.version) {
+        return {
+          error: `Stale publish rejected: version ${targetVersion.version} is not the latest (latest is ${latestVersion.version}, current is ${rule.currentVersion ?? "none"}). Publish the latest version.`,
+          status: 409,
+        } as const;
       }
 
       const [updated] = await tx
         .update(assignmentRules)
         .set({
           status: "ACTIVE",
-          currentVersion: latestVersion.version,
+          currentVersion: targetVersion.version,
           updatedAt: new Date(),
         })
         .where(eq(assignmentRules.id, ruleId))
@@ -557,18 +682,18 @@ ruleRoutes.post("/:id/publish", async (req: Request, res: Response) => {
           entityId: ruleId,
           payload: {
             companyId: rule.companyId,
-            version: latestVersion.version,
-            effectiveAt: latestVersion.effectiveFrom,
+            version: targetVersion.version,
+            effectiveAt: targetVersion.effectiveFrom,
           },
         },
         tx,
       );
 
-      return { rule: updated, publishedVersion: latestVersion };
+      return { rule: updated, publishedVersion: targetVersion };
     });
 
-    if ("error" in result && typeof result.status === "number") {
-      res.status(result.status).json({ error: result.error });
+    if ("error" in result && typeof (result as any).status === "number") {
+      res.status((result as any).status).json({ error: (result as any).error });
       return;
     }
 

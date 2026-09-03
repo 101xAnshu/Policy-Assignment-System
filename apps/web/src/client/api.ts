@@ -125,11 +125,30 @@ export async function previewRuleVersionImpact(ruleId: string, payload: any) {
   return res.json();
 }
 
-export async function publishRule(ruleId: string, validFrom?: string) {
+export async function createRuleVersion(ruleId: string, payload: any) {
+  const res = await fetch(`${BASE}/rules/${ruleId}/versions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || "Failed to create rule version");
+  }
+  return res.json();
+}
+
+export async function fetchRuleDetail(ruleId: string) {
+  const res = await fetch(`${BASE}/rules/${ruleId}`);
+  if (!res.ok) throw new Error("Failed to fetch rule detail");
+  return res.json();
+}
+
+export async function publishRule(ruleId: string, validFrom?: string, version?: number) {
   const res = await fetch(`${BASE}/rules/${ruleId}/publish`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ validFrom }),
+    body: JSON.stringify({ validFrom, version }),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

@@ -4,6 +4,8 @@ import {
   fetchPolicies,
   fetchCategories,
   createRule,
+  createRuleVersion,
+  fetchRuleDetail,
   publishRule,
   previewRuleImpact,
   previewRuleVersionImpact,
@@ -42,6 +44,23 @@ export const RulesView: React.FC = () => {
   const [loadingImpact, setLoadingImpact] = useState<boolean>(false);
   const [publishingRuleId, setPublishingRuleId] = useState<string | null>(null);
   const [publishing, setPublishing] = useState<boolean>(false);
+
+  // New-version (edit lifecycle) modal — constrained to the spec grammar:
+  // single EQUALS condition or ALL (everyone). No OR/NOT, no DSL.
+  const [showVersionModal, setShowVersionModal] = useState<boolean>(false);
+  const [editingRule, setEditingRule] = useState<any | null>(null);
+  const [versionPredicateType, setVersionPredicateType] = useState<"EQUALS" | "ALL">("EQUALS");
+  const [versionField, setVersionField] = useState<string>("state");
+  const [versionFieldVal, setVersionFieldVal] = useState<string>("California");
+  const [versionPriority, setVersionPriority] = useState<number>(50);
+  const [versionEffectiveFrom, setVersionEffectiveFrom] = useState<string>("2024-08-28");
+  const [savingVersion, setSavingVersion] = useState<boolean>(false);
+  const [versionError, setVersionError] = useState<string | null>(null);
+
+  // Version history modal (v1 + v2 inspection via GET /:id).
+  const [showHistoryModal, setShowHistoryModal] = useState<boolean>(false);
+  const [historyData, setHistoryData] = useState<any | null>(null);
+  const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
 
   const loadData = async () => {
     const [rData, pData, cData] = await Promise.all([
@@ -107,13 +126,90 @@ export const RulesView: React.FC = () => {
     if (!publishingRuleId) return;
     setPublishing(true);
     try {
-      await publishRule(publishingRuleId, "2024-08-28");
+      // Publish the explicit latest version so the lifecycle is
+      // create-version → preview → publish(version) end-to-end.
+      const detail = await fetchRuleDetail(publishingRuleId);
+      const latestVersion = (detail.versions ?? []).reduce(
+        (m: number, v: any) => Math.max(m, v.version),
+        0,
+      );
+      await publishRule(
+        publishingRuleId,
+        "2024-08-28",
+        latestVersion > 0 ? latestVersion : undefined,
+      );
       await loadData();
       setShowImpactModal(false);
     } catch (err: any) {
       console.error("Failed to publish rule:", err.message);
     } finally {
       setPublishing(false);
+    }
+  };
+
+  const handleOpenNewVersion = async (rule: any) => {
+    setEditingRule(rule);
+    setVersionError(null);
+    try {
+      const detail = await fetchRuleDetail(rule.id);
+      const latest = (detail.versions ?? []).sort((a: any, b: any) => b.version - a.version)[0];
+      if (latest?.predicate?.type === "EQUALS") {
+        setVersionPredicateType("EQUALS");
+        setVersionField(latest.predicate.field ?? "state");
+        setVersionFieldVal(latest.predicate.value ?? "");
+      } else if (latest?.predicate?.type === "ALL" && (latest.predicate.children ?? []).length === 0) {
+        setVersionPredicateType("ALL");
+      } else if (latest?.predicate?.type === "ALL" && latest.predicate.children?.length === 1 && latest.predicate.children[0]?.type === "EQUALS") {
+        // Single-condition ALL wrapper: flatten for the constrained editor.
+        setVersionPredicateType("EQUALS");
+        setVersionField(latest.predicate.children[0].field ?? "state");
+        setVersionFieldVal(latest.predicate.children[0].value ?? "");
+      } else {
+        setVersionPredicateType("EQUALS");
+      }
+      setVersionPriority(latest?.priority ?? 50);
+      setVersionEffectiveFrom(latest?.effectiveFrom ?? "2024-08-28");
+    } catch {
+      setVersionPredicateType("EQUALS");
+    }
+    setShowVersionModal(true);
+  };
+
+  const handleSaveVersion = async () => {
+    if (!editingRule) return;
+    setSavingVersion(true);
+    setVersionError(null);
+    try {
+      const predicate =
+        versionPredicateType === "ALL"
+          ? { type: "ALL", children: [] as any[] }
+          : { type: "EQUALS", field: versionField, value: versionFieldVal };
+      await createRuleVersion(editingRule.id, {
+        predicate,
+        priority: Number(versionPriority),
+        effectiveFrom: versionEffectiveFrom,
+      });
+      await loadData();
+      setShowVersionModal(false);
+    } catch (err: any) {
+      setVersionError(err.message);
+    } finally {
+      setSavingVersion(false);
+    }
+  };
+
+  const handleOpenHistory = async (rule: any) => {
+    setShowHistoryModal(true);
+    setLoadingHistory(true);
+    setHistoryData(null);
+    try {
+      const detail = await fetchRuleDetail(rule.id);
+      setHistoryData(detail);
+    } catch (err: any) {
+      console.error("Failed to fetch rule history:", err.message);
+      setShowHistoryModal(false);
+    } finally {
+      setLoadingHistory(false);
     }
   };
 
@@ -229,12 +325,26 @@ export const RulesView: React.FC = () => {
                     </span>
                   </td>
                   <td className="p-3 text-right">
-                    <button
-                      onClick={() => handlePreviewPublish(rule)}
-                      className="px-2.5 py-1 text-xs font-medium rounded bg-surface-raised hover:bg-surface-highlight text-primary border border-border transition-colors inline-flex items-center gap-1"
-                    >
-                      <Eye className="w-3 h-3 text-secondary" /> Preview impact
-                    </button>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        onClick={() => handleOpenNewVersion(rule)}
+                        className="px-2.5 py-1 text-xs font-medium rounded bg-surface-raised hover:bg-surface-highlight text-primary border border-border transition-colors"
+                      >
+                        New version
+                      </button>
+                      <button
+                        onClick={() => handleOpenHistory(rule)}
+                        className="px-2.5 py-1 text-xs font-medium rounded bg-surface-raised hover:bg-surface-highlight text-primary border border-border transition-colors"
+                      >
+                        History
+                      </button>
+                      <button
+                        onClick={() => handlePreviewPublish(rule)}
+                        className="px-2.5 py-1 text-xs font-medium rounded bg-surface-raised hover:bg-surface-highlight text-primary border border-border transition-colors inline-flex items-center gap-1"
+                      >
+                        <Eye className="w-3 h-3 text-secondary" /> Preview impact
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -415,6 +525,121 @@ export const RulesView: React.FC = () => {
               >
                 {creating ? "Creating..." : "Save as draft"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* New version modal (edit lifecycle: draft vN+1, then preview → publish) */}
+      {showVersionModal && editingRule && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-surface border border-border rounded-lg shadow-xl overflow-hidden flex flex-col">
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+              <div>
+                <h3 className="font-heading text-[15px] font-semibold text-primary">New version — {editingRule.name}</h3>
+                <p className="text-xs text-secondary mt-0.5">Drafts vN+1 without changing live assignments until publish</p>
+              </div>
+              <button onClick={() => setShowVersionModal(false)} className="text-secondary hover:text-primary p-1">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div>
+                <label className={labelClass}>Predicate</label>
+                <select value={versionPredicateType} onChange={(e) => setVersionPredicateType(e.target.value as "EQUALS" | "ALL")} className={inputClass}>
+                  <option value="EQUALS">Field equals</option>
+                  <option value="ALL">All employees</option>
+                </select>
+              </div>
+              {versionPredicateType === "EQUALS" && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelClass}>Field</label>
+                    <select value={versionField} onChange={(e) => setVersionField(e.target.value)} className={inputClass}>
+                      <option value="state">state</option>
+                      <option value="country">country</option>
+                      <option value="department">department</option>
+                      <option value="employmentType">employmentType</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Value</label>
+                    <input type="text" value={versionFieldVal} onChange={(e) => setVersionFieldVal(e.target.value)} className={inputClass} />
+                  </div>
+                </div>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelClass}>Priority</label>
+                  <input type="number" value={versionPriority} onChange={(e) => setVersionPriority(Number(e.target.value))} className={inputClass} />
+                </div>
+                <div>
+                  <label className={labelClass}>Effective from</label>
+                  <input type="date" value={versionEffectiveFrom} onChange={(e) => setVersionEffectiveFrom(e.target.value)} className={`${inputClass} font-mono`} />
+                </div>
+              </div>
+              {versionError && (
+                <div className="p-3 rounded bg-status-error/10 border border-status-error/20 text-xs text-status-error">
+                  {versionError}
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 py-3 border-t border-border flex items-center justify-end gap-2">
+              <button onClick={() => setShowVersionModal(false)} className="px-3 py-1.5 rounded text-[13px] font-medium text-secondary hover:text-primary">
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveVersion}
+                disabled={savingVersion}
+                className="px-3 py-1.5 rounded text-[13px] font-medium bg-accent hover:bg-accent-500 text-white transition-colors"
+              >
+                {savingVersion ? "Saving..." : "Save new draft version"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Version history modal (v1 + v2 inspection) */}
+      {showHistoryModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-surface border border-border rounded-lg shadow-xl overflow-hidden flex flex-col max-h-[80vh]">
+            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+              <div>
+                <h3 className="font-heading text-[15px] font-semibold text-primary">Version history</h3>
+                <p className="text-xs text-secondary mt-0.5">{historyData?.name ?? "Loading..."}</p>
+              </div>
+              <button onClick={() => setShowHistoryModal(false)} className="text-secondary hover:text-primary p-1">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-5 overflow-y-auto">
+              {loadingHistory ? (
+                <div className="py-8 text-center text-secondary text-xs">Loading versions...</div>
+              ) : (
+                <div className="space-y-2">
+                  {(historyData?.versions ?? []).map((v: any) => (
+                    <div key={v.id} className="p-3 rounded bg-background border border-border text-xs flex items-center justify-between">
+                      <div>
+                        <span className="font-mono font-medium text-primary">v{v.version}</span>
+                        <span className="ml-2 text-secondary">priority {v.priority}</span>
+                        <p className="text-tertiary mt-1 font-mono">{JSON.stringify(v.predicate)}</p>
+                        <p className="text-tertiary mt-0.5">effective {v.effectiveFrom}</p>
+                      </div>
+                      {historyData?.currentVersion === v.version && historyData?.status === "ACTIVE" ? (
+                        <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-status-success/10 text-status-success">live</span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-surface-raised text-tertiary border border-border">draft/history</span>
+                      )}
+                    </div>
+                  ))}
+                  {(historyData?.versions ?? []).length === 0 && (
+                    <div className="text-xs text-tertiary">No versions found.</div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
