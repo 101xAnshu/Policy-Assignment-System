@@ -1,6 +1,5 @@
 /**
  * Transactional Outbox Event Publisher.
- * Build Spec §25.
  *
  * Writes outbox events within the same database transaction as domain mutations.
  */

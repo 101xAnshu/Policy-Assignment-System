@@ -1,7 +1,7 @@
 # Warp Policy Assignment System
 
-> **Production-grade, temporally-aware, deterministic policy resolution and convergence engine.**
-> Built with Node.js, TypeScript, PostgreSQL 16, Drizzle ORM, Express, React 19, React Flow, and Tailwind CSS.
+> **Demo-grade policy assignment system built with production patterns: deterministic resolution, temporal state, incremental reconciliation, and explainable decisions.**
+> Built with Node.js, TypeScript, PostgreSQL 16, Drizzle ORM, Express, React 19, Vite, React Flow (`@xyflow/react`), and Tailwind CSS.
 
 ---
 
@@ -16,20 +16,21 @@
 8. [React Flow Dynamic Resolution DAG & Web UI](#react-flow-dynamic-resolution-dag--web-ui)
 9. [Property-Based Testing & Mathematical Invariants](#property-based-testing--mathematical-invariants)
 10. [Acme Corporation Live Demo Scenario](#acme-corporation-live-demo-scenario)
-11. [Quickstart & Getting Started](#quickstart--getting-started)
+11. [Scope & Known Limitations](#scope--known-limitations)
+12. [Quickstart & Getting Started](#quickstart--getting-started)
 
 ---
 
 ## Executive Summary & Architectural Pillars
 
-The Warp Policy Assignment System is designed from foundational principles for enterprise payroll and HR policy governance. It guarantees:
+The Warp Policy Assignment System is a working demo of enterprise policy governance. It shows how rules, employee state, and time determine policy assignments — and proves each decision can be explained and re-converged. It is **not** a production service; there is no deployment, auth, or multi-tenancy.
 
-- **P1: Mathematical Correctness**: Resolution is a pure mathematical function of $(E_t, R_t, t)$ with zero side effects.
-- **P2: Deterministic Ordering**: Evaluation order is strictly invariant under any input permutation (`priority DESC`, `ruleId ASC`).
-- **P3: Explicit Half-Open Temporal Windows**: Validity is represented as $[\text{effectiveFrom}, \text{effectiveTo})$, preventing interval boundary gaps and overlaps.
-- **P4: Strictly Idempotent Reconciliation**: Running reconciliation on converged state produces 0 additions, 0 revocations, and 0 database writes.
-- **P5: Scoped Incremental Recomputation**: Predicates are indexed by employee fields, group IDs, and tenure milestones to recompute only affected categories.
-- **P6: Total Auditability & "Why?" Explainability**: Every historical assignment links to a frozen decision snapshot with plain-language reasoning.
+- **P1: Mathematical Correctness**: Resolution is a pure function of (employee state, rules, date) with zero side effects (`packages/resolver/src/resolver.ts`).
+- **P2: Deterministic Ordering**: Evaluation order is invariant under input permutation (`priority DESC`, `ruleId ASC`).
+- **P3: Explicit Half-Open Temporal Windows**: Validity is [effectiveFrom, effectiveTo), preventing boundary gaps and overlaps.
+- **P4: Idempotent Reconciliation**: Re-running reconciliation on converged state yields 0 additions, 0 revocations, 0 updates (`packages/reconciler/src/diff.ts`, tested in `reconcile-api.test.ts`).
+- **P5: Scoped Incremental Recomputation**: Predicates are indexed by employee fields, group IDs, and tenure flags so only affected categories reconcile (`packages/reconciler/src/dependency-index.ts`, `scoped-reconciler.ts`).
+- **P6: Auditability & "Why?" Explainability**: Assignments carry a frozen decision snapshot; the Why engine reuses the resolver, not a second algorithm (`packages/audit/src/why-engine.ts`).
 
 ```mermaid
 graph LR
@@ -51,6 +52,10 @@ graph LR
         OUTBOX[("Transactional Outbox")]
     end
 
+    subgraph Workers ["Async Convergence"]
+        W["Worker: outbox + temporal jobs<br/>lease + bounded retry"]
+    end
+
     subgraph Insights ["Audit & Visualization"]
         WHY["'Why?' Engine"]
         DAG["React Flow DAG"]
@@ -65,6 +70,8 @@ graph LR
     AMB -->|Resolved| DIFF
     DIFF --> STORE
     STORE --> OUTBOX
+    OUTBOX --> W
+    W --> STORE
     STORE --> WHY
     DR --> DAG
     STORE --> TL
@@ -95,119 +102,143 @@ erDiagram
 ```
 
 ### Key Schemas
-- **`employees` & `employee_versions`**: Atomic valid-time tracking for department, employment type, location, and manager status.
-- **`policy_categories`**: Declares cardinality constraints (`ONE` vs `MANY`).
-- **`assignment_rules` & `assignment_rule_versions`**: Draft $\to$ Published rule versioning with AST predicate JSON payloads.
-- **`policy_assignments`**: Materialized assignments with `explanation_snapshot` JSONB and $[ \text{effectiveFrom}, \text{effectiveTo} )$ timestamps.
-- **`outbox_events`**: Transactional domain event log ensuring at-least-once delivery for asynchronous triggers.
-- **`temporal_jobs`**: Future milestone execution ledger for scheduled promotions (e.g. 24-month tenure promotion).
+- **`employees` & `employee_versions`**: Valid-time history (`[validFrom, validTo)`) for country, state, department, employment type, and manager flag.
+- **`policy_categories`**: Declares cardinality (`ONE` vs `MANY`).
+- **`assignment_rules` & `assignment_rule_versions`**: Stable rule identity plus immutable versions. Priority lives on the version. New versions via `POST /api/rules/:id/versions`; activation via `POST /api/rules/:id/publish` with an explicit `version`.
+- **`policy_assignments`**: Materialized desired state with `explanation_snapshot` JSONB and [effectiveFrom, effectiveTo) dates.
+- **`outbox_events`**: Transactional event log with `claimed_at` lease, `attempts` count, and `last_error` for bounded retries.
+- **`temporal_jobs`**: Due-list for tenure milestones and future-dated changes, with the same lease/retry columns.
 
 ---
 
 ## Temporal Semantics & Interval Math
 
-Validity intervals follow half-open semantics $[ \text{effectiveFrom}, \text{effectiveTo} )$:
-1. **Active Condition**: An assignment is active at date $t$ if and only if:
-   $$\text{effectiveFrom} \le t < \text{effectiveTo} \quad (\text{or } \text{effectiveTo is NULL})$$
-2. **Cardinality `ONE` Non-Overlap**: For any category with cardinality `ONE`, no two active assignments can overlap:
-   $$\forall a_1, a_2 \in \text{Assignments}(E, C), \quad [a_1.\text{from}, a_1.\text{to}) \cap [a_2.\text{from}, a_2.\text{to}) = \emptyset$$
-3. **Inclusive Tenure Calculation**: Tenure months are calculated with inclusive calendar-day math:
-   $$\text{Tenure}(E, t) = (\text{Year}(t) - \text{Year}(h)) \times 12 + (\text{Month}(t) - \text{Month}(h)) + (\text{Day}(t) \ge \text{Day}(h) ? 0 : -1)$$
+Validity intervals follow half-open semantics [effectiveFrom, effectiveTo):
+1. **Active Condition**: An assignment is active at date t iff:
+   `effectiveFrom <= t < effectiveTo` (or `effectiveTo` is NULL)
+2. **Cardinality `ONE` Goal**: For `ONE` categories the reconciler converges toward at most one active assignment per employee. Overlap is rejected on the direct-assignment API (HTTP 409); there is **no database exclusion constraint** (see Limitations).
+3. **Tenure Calculation**: Completed calendar months, minus one when the evaluation day-of-month precedes the hire day-of-month:
+   Tenure(E, t) = (Year(t) - Year(hire)) × 12 + (Month(t) - Month(hire)) − (Day(t) >= Day(hire) ? 0 : 1)
+   Example: hire `2024-08-28` reaches 24 months on `2026-08-28`.
 
 ---
 
 ## Deterministic Resolver & Ambiguity Detection
 
-When resolving rules for category $C$ at date $t$:
-1. Filter active rule versions where $\text{validFrom} \le t < \text{validTo}$.
-2. Evaluate AST predicates against employee attributes and group memberships.
+When resolving rules for category C at date t (`packages/resolver/src/resolver.ts`):
+1. Keep rule versions where `effectiveFrom <= t < effectiveTo`.
+2. Evaluate supported predicates (`ALL`, `EQUALS` on country/state/department/employmentType, `IS_MANAGER`, `GROUP_MEMBER`, `TENURE_AT_LEAST`) against the employee context and group memberships at t.
 3. For **`ONE` Categories**:
-   - Order matching rules by `priority DESC`, then `ruleId ASC`.
-   - If multiple matching rules share the top priority but assign **distinct policies**, the resolver marks the category as `status: "AMBIGUOUS"` and assigns zero policies.
-   - If multiple rules share top priority and assign the **same policy**, deduplicate and assign the policy deterministically.
+   - Order matches by `priority DESC`, then `ruleId ASC`.
+   - Distinct policies tied at top priority → `status: "AMBIGUOUS"`, zero assignments (never a silent winner).
+   - Same policy tied at top priority → deduplicated single winner.
 4. For **`MANY` Categories**:
-   - Assign all matching distinct policies.
+   - Assign all matching distinct policies (deduplicated by policy).
 
 ---
 
 ## Reconciliation Engine & Atomic Convergence
 
-Reconciliation is a pure 3-phase convergent transaction:
-1. **Preview / Diff Calculation**: Computes `toAdd`, `toRevoke`, `toUpdate`, and `unchanged`.
-2. **Atomic Convergence**:
-   - Closes existing assignments by setting $\text{effectiveTo} = t$.
-   - Inserts new assignments starting at $\text{effectiveFrom} = t$ with an attached `explanationSnapshot`.
-   - Records `POLICY_ASSIGNED` and `POLICY_REVOKED` in `audit_events`.
-3. **Idempotency Guarantee**: Running reconciliation twice on date $t$ yields $\Delta = \emptyset$.
+Reconciliation converges materialized state toward the resolver (`packages/reconciler/src/reconciler.ts`, `diff.ts`):
+1. **Preview / Diff**: `computeDiff` groups desired vs actual by category, then by policy: missing → `toAdd`, extra → `toRevoke`, same policy with different `sourceRuleId/sourceRuleVersion` → `toUpdate`, else `unchanged`.
+2. **Atomic Apply**: Closes rows with `effectiveTo = t`, inserts new rows from t with an `explanationSnapshot`, and writes `POLICY_ASSIGNED / POLICY_REVOKED / POLICY_UPDATED` audit events in one transaction. Manual `POST /employees/:id/assignments` is the only non-resolver write path and is guarded by an overlap check.
+3. **Idempotency**: Converged state diffs to no changes. Proven by double-reconcile tests and property test P5.
+
+Full-company reconciliation (`reconcileCompany`) isolates per-employee failures: one bad employee is collected into `failures` and does not abort the rest.
 
 ---
 
 ## Transactional Outbox & Scoped Incremental Reconciler
 
-1. **Transactional Outbox**:
-   - Attribute mutations (e.g. employee relocation) atomically write to `outbox_events` within the same PostgreSQL transaction.
-2. **In-Memory AST Dependency Index**:
-   - Maps employee fields (`state`, `country`, `department`, `employmentType`, `isManager`), group IDs, and tenure dependencies to affected policy categories.
-3. **Scoped Recomputation**:
-   - Relocating an employee from NY to CA re-evaluates only `Vacation` and `Workplace Training` categories, bypassing all unaffected categories.
+1. **Transactional Outbox**: Mutations write the domain change plus `outbox_events` row in one Postgres transaction (`packages/db/src/outbox/publisher.ts`). No broker.
+2. **Dependency Index** (`dependency-index.ts`): maps employee fields, group IDs, and tenure flags to categories. `EMPLOYEE_UPDATED` / `GROUP_MEMBERSHIP_CHANGED` reconcile only affected categories via `reconcileEmployeeScoped`. Rule publishes trigger full-company reconciliation (sequential; correctness preferred over indexed fanout).
+3. **Worker durability** (`outbox-processor.ts`, `apps/worker`): Postgres polling with `FOR UPDATE SKIP LOCKED`. Claims are leases: stale claims (default 5 min, `STALE_CLAIM_TIMEOUT_MS`) are reclaimable; `attempts` increments on claim so crashes count; rows park after `MAX_CLAIM_ATTEMPTS` (default 10) and stay unprocessed with `last_error` — failed work is never silently marked complete. Partial company failures fail the triggering `RULE_PUBLISHED` event so it retries (successes replay as no-ops).
+4. **Temporal triggers** (`temporal-planner.ts`): tenure milestones and future-dated changes schedule `temporal_jobs` rows processed by `processDueTemporalJobs` with identical lease/retry semantics.
 
 ---
 
 ## Audit System & "Why?" Explainability Engine
 
-Answers the fundamental question:
-> *"Why does employee $E$ have or not have policy $P$ at date $t$?"*
+Answers *"Why does employee E have or not have policy P at date t?"* from the resolver trail plus the frozen snapshot on the materialized row.
 
 ### Explainability Statuses:
-- **`ASSIGNED` (Winner)**: Matched rule won priority ranking.
-- **`OVERRIDDEN`**: Matched rule criteria, but superseded by a higher priority rule.
-- **`NO_MATCH`**: Failed one or more predicate conditions (returns full failed condition trail).
-- **`AMBIGUOUS`**: Tied at highest priority with a conflicting policy.
+- **`ASSIGNED`**: Matched rule won its category.
+- **`OVERRIDDEN`**: Matched, but a higher-priority rule won.
+- **`NO_MATCH`**: Predicate failed (full failed-condition trail returned).
+- **`AMBIGUOUS`**: Top-priority tie across distinct policies.
+- **`NOT_IN_DESIRED`**: No active rule targets the policy.
+
+UI: per-policy **Why?** modal, rule version **History** modal, unified employee timeline, audit explorer, and `GET /api/employees/:id/why?policyId=&at=`.
 
 ---
 
 ## React Flow Dynamic Resolution DAG & Web UI
 
-The web interface is built with React 19, React Flow (`@xyflow/react`), and Tailwind CSS:
-- ⚡ **Resolution DAG Explorer**: Interactive node graph visualizing employee context $\to$ category evaluation $\to$ policy assignment outputs.
-- 👥 **Employees & Timeline**: Point-in-time assignment matrix, profile versioning, and unified chronological audit timeline.
-- 📜 **Rules Matrix**: AST rule inspector, priority ordering, and draft-to-publish workflow.
-- 🔄 **Reconciliation Center**: Live point-in-time diff simulation, company-wide convergence, and background worker queue runner.
-- 🔍 **Audit & "Why?" Playground**: Instant plain-language explainability inspector.
+Stack is **Express + Vite + React 19 + `@xyflow/react` + Tailwind** (deliberately not Next.js; see Limitations). The SPA is served statically by Express in production and via Vite dev proxy (`/api → localhost:3001`) in development.
+
+Demonstrable flows (all wired to the real resolver/worker, no mocks):
+- ⚡ **Resolution graph**: Employee → Resolver → Category decision → Policy nodes built from live `resolve` / `preview-change` results, with state simulation (CA/NY/TX/OR) and tenure presets.
+- 👥 **Employees & Timeline**: list, detail with assignments + versions + timeline.
+- 🧾 **Onboarding**: create form with live policy preview before save.
+- ✏️ **Attribute changes**: edit modal with downstream diff preview; apply only on confirm.
+- 📜 **Rules**: registry with priority ordering, **New version** authoring (constrained to single `EQUALS` or `ALL (everyone)` — no OR/NOT/DSL), version **History**, impact **Preview**, and explicit-version **Publish**.
+- 🔄 **Reconciliation Center**: per-employee/company reconcile, outbox + temporal job queues with manual processing.
+- 🔍 **Verify system** modal: runs randomized incremental-vs-full comparison plus invariant checks.
 
 ---
 
 ## Property-Based Testing & Mathematical Invariants
 
-Tested with `fast-check` over hundreds of randomized configurations:
-1. **Determinism**: 100% rule-order permutation invariance.
-2. **Cardinality**: `ONE` category never exceeds 1 assignment.
-3. **Priority Invariant**: Selected policy always matches the maximal candidate priority.
-4. **Reference Resolver Equivalence**: Optimized resolver matches unoptimized reference model bit-for-bit.
-5. **Reconciliation Idempotency**: Second pass on converged state strictly produces 0 mutations.
+**20 suites, 136 tests, all passing** (`npx vitest run`): 7 unit files (78 tests), 9 integration files (52 tests), 4 scenario files (6 tests). Real Postgres + HTTP; no mocks. `fast-check` covers:
+
+1. **Determinism**: order-permutation invariance (P1).
+2. **Cardinality**: `ONE` never exceeds 1 in resolver output (P2).
+3. **Priority Invariant**: winner is always the maximal candidate priority (P3).
+4. **Reference Equivalence**: production resolver matches the reference implementation on randomized inputs (P4). The reference mirrors the production algorithm line-for-line, so this proves self-consistency, not independent specification correctness.
+5. **Reconciliation Idempotency**: re-diff of converged state is empty (P5).
+6. **Incremental-vs-Full**: scoped sequences equal full recompute for sequential in-order mutations (P6), plus the server `/system/verify-incremental` endpoint (policy-set comparison).
+
+Durability tests (`worker-durability.test.ts`, 7) prove stale-claim reclaim, lease release on failure, bounded parking, batch/company/temporal isolation, eventual retry, and replay idempotency. Versioning tests (`rule-versioning.test.ts`, 7) prove the full `POST /versions → publish(version) → outbox → reconcile` lifecycle plus stale/duplicate/invalid guards.
 
 ---
 
 ## Acme Corporation Live Demo Scenario
 
-| Employee | Hire Date | Scenario / Attributes | Resolved Policies (At Hire) |
+Seeded tenant (`packages/db/src/seed.ts`, deterministic UUIDs): 1 company, 7 categories, 12 policies, 12 rules, 1 group.
+
+| Employee | State / Dept / Type / Manager | Hire Date | Notes |
 |---|---|---|---|
-| **Sarah Chen** | 2024-08-28 | Engineering, Full-time, California, Manager | CA Vacation (Priority 50), Engineering Equipment, Health, Remote Work, Manager Training |
-| **Alex Morgan** | 2024-08-28 | Sales, Full-time, New York | Standard Vacation (Priority 10), Standard Equipment, Health, Sales Training |
-| **Jordan Lee** | 2024-08-28 | HR, Contractor, Ontario (Canada) | Standard Equipment, Contractor Remote Stipend |
-| **Taylor Swift** | 2024-08-28 | Legal, Full-time, UK | Standard Vacation, Standard Equipment, Health |
+| **Sarah Chen** | California / Engineering / Full-time / Manager (in Managers group) | 2024-08-28 | Priority-conflict demo (CA 50 beats Standard 10); tenure demo (Extended 60 at 2026-08-28) |
+| **Alex Morgan** | New York / Engineering / Full-time / IC | 2023-06-15 | Location-change demo (NY→CA) |
+| **Maya Patel** | California / Finance / Contractor | 2025-01-10 | Predicate-broadening demo (no stipend until rule widens) |
+| **Daniel Lee** | Oregon / Engineering / Full-time / Manager (in Managers group) | 2022-03-01 | Tenured manager control |
+
+Rule archetypes in seed: CA-vs-Standard priority conflict (Vacation `ONE`), tenure-gated Extended Vacation, group-gated Manager Training, location-gated CA Workplace Training, and `MANY` compliance/app-access/stipend rules. Suggested narrative: Why does Sarah have CA Vacation → move her to NY with preview → apply and reconcile → travel to 2026-08-28 for tenure → publish a rule version with impact preview → run Verify.
+
+---
+
+## Scope & Known Limitations
+
+- **Local demo, not production**: no deployment, auth, multi-tenancy, pagination, or observability beyond structured logs.
+- **Vite, not Next.js**: early drafts considered Next.js, but the implementation ships Express + Vite SPA. This was kept deliberately — the API was already working in Express and a framework migration added risk without demo value. The stack above states this honestly.
+- **Cardinality is application-enforced**: overlapping `ONE` intervals are rejected on the direct-assignment route (409) and avoided by diff convergence, but there is no Postgres exclusion constraint. Concurrent writers could violate it.
+- **Reference resolver is a mirror, not an oracle**: it duplicates the production algorithm, so equivalence tests prove self-consistency.
+- **Incremental proof is bounded**: sequential, in-order mutations at fixed dates. Duplicate/out-of-order/concurrent delivery is handled by idempotent converge + lease/retry mechanics and covered by durability tests, but not by randomized adversarial generators.
+- **Worker delivery is bounded at-least-once**: 5-minute claim leases, max 10 attempts, then rows park with `last_error`. Poison work needs operator reset (`attempts=0, claimed_at=NULL`).
+- **Rule fanout is full-company sequential** with per-employee isolation; indexed old-vs-new population filtering was deferred for correctness.
+- **Rule authoring is constrained**: single `EQUALS` or `ALL (everyone)` in the UI; `IS_MANAGER` / `GROUP_MEMBER` / `TENURE_AT_LEAST` rules exist in seed/API but have no visual builder. No OR/NOT/DSL by design.
+- **Temporal edge**: month-end tenure arithmetic (e.g. Jan 31 + 1 month) can schedule a milestone that still evaluates short; the job succeeds idempotently but the boundary fires late.
 
 ---
 
 ## Quickstart & Getting Started
 
 ### 1. Prerequisites
-- Node.js $\ge 20$
-- PostgreSQL 16 (Running on port 5433 or configured via `.env`)
+- Node.js >= 20
+- PostgreSQL 16 (Docker Compose maps `5433:5432` by default)
 
 ### 2. Environment Setup
 ```bash
-cp .env.example .env
 npm install
 ```
 
@@ -219,14 +250,14 @@ npm run db:seed
 
 ### 4. Run Test Suite
 ```bash
-# Run all 13 test suites (114 tests)
+# 20 suites, 136 tests (unit + integration + scenarios)
 npx vitest run
 ```
 
 ### 5. Start Development Servers
 ```bash
-# Starts Express API (port 3001) and Vite React SPA (port 3000)
+# API defaults to PORT=3000 (set PORT=3001 when running alongside Vite on :3000)
 npm run dev
 ```
 
-Visit **`http://localhost:3000`** in your browser.
+With the UI on `:3000` (Vite, proxying `/api` to `:3001`) and the API on `:3001`, visit **`http://localhost:3000`**. Run the worker with `npm run dev:worker`, or trigger `POST /api/worker/process-outbox` and `POST /api/worker/process-temporal` from the Reconciliation Center.

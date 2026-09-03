@@ -1,6 +1,5 @@
 /**
  * Integration tests for Policy Assignments & Historical Timeline API.
- * Build Spec §15, §17, §18, §29.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -171,7 +170,7 @@ describe("Assignments API & Temporal Invariants", () => {
     expect(body.byCategory.vacation[1].policyName).toBe("Extended Vacation");
   });
 
-  it("GET /api/assignments/:id/explanation returns frozen explanation snapshot (§18, §29)", async () => {
+  it("GET /api/assignments/:id/explanation returns frozen explanation snapshot", async () => {
     // Fetch Sarah's history to get assignment ID
     const historyRes = await fetch(
       `${baseUrl}/api/employees/${IDS.sarah}/assignments/history`,

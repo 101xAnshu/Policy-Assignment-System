@@ -1,6 +1,5 @@
 /**
  * Integration tests for Reconciliation API & Convergence Engine.
- * Build Spec §19, §20, §23, §24, §25, §42, §43.
  *
  * Invariants verified:
  * - P4: Idempotency: Reconciling twice on the same date produces 0 changes on 2nd run.

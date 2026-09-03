@@ -1,10 +1,9 @@
 /**
  * Policy Assignment & History API routes.
- * Build Spec §17, §18, §29.
  *
  * GET /api/employees/:id/assignments          — active assignments at date
  * GET /api/employees/:id/assignments/history  — full assignment timeline
- * GET /api/assignments/:id/explanation        — frozen explanation snapshot (§18, §29)
+ * GET /api/assignments/:id/explanation        — frozen explanation snapshot
  */
 
 import { Router, type Request, type Response } from "express";

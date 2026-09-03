@@ -1,6 +1,5 @@
 /**
  * "Why?" Explainability Engine.
- * Build Spec §28, §29.
  *
  * Explains exactly WHY an employee has (or does NOT have) a specific policy at a given date $t$.
  *

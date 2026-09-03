@@ -1,6 +1,5 @@
 /**
  * Unit tests for the Deterministic Resolver.
- * Build Spec §12, §13, §14, §15, §38, §39.
  *
  * Invariants tested:
  * - Determinism: Shuffled rule input order produces identical results.
@@ -294,7 +293,7 @@ describe("Deterministic Resolver", () => {
   });
 });
 
-// ─── Temporal Half-Open Interval Semantics (§15) ─────────────────────────────
+// ─── Temporal Half-Open Interval Semantics ─────────────────────────────
 
 describe("Temporal Half-Open Intervals [effectiveFrom, effectiveTo)", () => {
   const rule: EvaluatableRule = {

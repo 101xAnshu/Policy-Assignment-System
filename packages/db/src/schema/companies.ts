@@ -2,7 +2,6 @@ import { pgTable, uuid, varchar, timestamp } from "drizzle-orm/pg-core";
 
 /**
  * Companies table.
- * Build Spec §6.
  */
 export const companies = pgTable("companies", {
   id: uuid("id").primaryKey().defaultRandom(),

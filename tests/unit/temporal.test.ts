@@ -1,6 +1,5 @@
 /**
  * Unit tests for Temporal Semantics & Interval Math.
- * Build Spec §15, §17.
  *
  * Invariants:
  * - All intervals are half-open: [from, to)

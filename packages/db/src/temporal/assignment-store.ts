@@ -1,11 +1,10 @@
 /**
  * Temporal Assignment Store.
- * Build Spec §15, §17, §18.
  *
  * Manages persisted policy assignments with temporal half-open intervals [effectiveFrom, effectiveTo).
  * Guarantees:
  * - P6: Explicit temporal validity.
- * - P7: Stable explanation snapshots attached to historical records (§18).
+ * - P7: Stable explanation snapshots attached to historical records.
  * - Cardinality: For ONE categories, validates that no two assignments overlap in time.
  */
 
@@ -143,7 +142,6 @@ export async function getAssignmentHistory(employeeId: string) {
 
 /**
  * Get the frozen explanation snapshot for a specific assignment ID.
- * Build Spec §18, §29.
  */
 export async function getAssignmentExplanation(assignmentId: string) {
   const [row] = await db

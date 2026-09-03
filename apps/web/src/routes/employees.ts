@@ -1,13 +1,12 @@
 /**
  * Employee API routes.
- * Build Spec §29, §31, §32.
  *
  * GET  /api/employees                    — list employees
  * GET  /api/employees/:id                — get employee detail
  * POST /api/employees                    — create employee
  * PATCH /api/employees/:id               — update employee attributes
- * POST /api/employees/:id/preview-change — preview attribute change diff before applying (§32)
- * POST /api/employees/preview-onboarding — preview onboarding policies before creation (§31)
+ * POST /api/employees/:id/preview-change — preview attribute change diff before applying
+ * POST /api/employees/preview-onboarding — preview onboarding policies before creation
  */
 
 import { Router, type Request, type Response } from "express";
@@ -43,7 +42,7 @@ employeeRoutes.get("/", async (_req: Request, res: Response) => {
   }
 });
 
-// ─── POST /api/employees/preview-onboarding (§31) ────────────────────────────
+// ─── POST /api/employees/preview-onboarding ────────────────────────────
 
 employeeRoutes.post("/preview-onboarding", async (req: Request, res: Response) => {
   try {
@@ -115,7 +114,7 @@ employeeRoutes.get("/:id", async (req: Request, res: Response) => {
   }
 });
 
-// ─── POST /api/employees/:id/preview-change (§32) ────────────────────────────
+// ─── POST /api/employees/:id/preview-change ────────────────────────────
 
 employeeRoutes.post("/:id/preview-change", async (req: Request, res: Response) => {
   try {
@@ -352,7 +351,7 @@ employeeRoutes.patch("/:id", async (req: Request, res: Response) => {
       let updated = current;
 
       if (isFutureDated) {
-        // Build Spec §21: Schedule future temporal job instead of immediate current-state reconciliation
+        // Schedule future temporal job instead of immediate current-state reconciliation
         await tx.insert(temporalJobs).values({
           employeeId,
           triggerAt: new Date(`${effectiveAt}T00:00:00.000Z`),

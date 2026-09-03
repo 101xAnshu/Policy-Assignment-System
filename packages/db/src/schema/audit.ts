@@ -11,7 +11,6 @@ import { companies } from "./companies";
 
 /**
  * Audit events table.
- * Build Spec §28.
  *
  * Every material state change is recorded.
  * effectiveAt and recordedAt are explicitly distinct:

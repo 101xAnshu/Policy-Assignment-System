@@ -1,6 +1,5 @@
 /**
  * Integration tests for "Why?" Explainability Engine, Timeline Reconstruction, and Audit API.
- * Build Spec §28, §29, §42, §43.
  *
  * Invariants tested:
  * - "Why?" answers why an assigned policy won (WINNER).

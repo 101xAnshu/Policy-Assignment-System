@@ -15,14 +15,13 @@ import { assignmentRules } from "./rules";
 
 /**
  * Policy assignments table — materialized actual state.
- * Build Spec §17.
  *
  * Assignments are derived state: rules + employee state + time → desired → reconciled → persisted.
  *
- * For ONE categories, the reconciler must prevent overlapping intervals (§17).
+ * For ONE categories, the reconciler must prevent overlapping intervals.
  * This is enforced transactionally by the application before committing.
  *
- * explanationSnapshot (§18) captures the full resolution context at assignment time
+ * explanationSnapshot captures the full resolution context at assignment time
  * so historical explanations remain stable even if rules are later modified or archived.
  *
  * effectiveFrom/effectiveTo: half-open [from, to) business-effective dates.

@@ -4,7 +4,7 @@
 
 The resolution engine is the pure mathematical core of the Policy Assignment System. It answers the fundamental question:
 
-> **"Given an employee's attributes, a company's active versioned rules, and a specific point in time $t$, what policies should this employee have?"**
+> **"Given an employee's attributes, a company's active versioned rules, and a specific point in time t, what policies should this employee have?"**
 
 ---
 
@@ -92,7 +92,7 @@ graph TD
 
 1. **Temporal Filtering:**
    Keep only rules where:
-   $$\text{effectiveFrom} \le \text{at} < \text{effectiveTo}$$
+   `effectiveFrom <= at < effectiveTo`
    *(If `effectiveTo` is null, the upper bound is unbounded).*
 
 2. **Predicate Evaluation:**
@@ -118,20 +118,20 @@ graph TD
 
 ---
 
-## Tenure Computation Semantics (§16)
+## Tenure Computation Semantics
 
 Tenure is calculated inclusively as completed months between `hireDate` and `evaluationDate`:
 
-$$\text{tenureMonths} = (\text{year}_{\text{eval}} - \text{year}_{\text{hire}}) \times 12 + (\text{month}_{\text{eval}} - \text{month}_{\text{hire}})$$
-*(decremented by 1 if $\text{day}_{\text{eval}} < \text{day}_{\text{hire}}$).*
+`tenureMonths = (evalYear - hireYear) × 12 + (evalMonth - hireMonth)`
+*(decremented by 1 if the evaluation day-of-month is before the hire day-of-month).*
 
 ### Concrete Sarah Chen Example:
 - `hireDate = 2024-08-28`
-- `evaluationDate = 2026-08-27` $\rightarrow$ 23 months $\rightarrow$ `TENURE_AT_LEAST(24)` is **false**
-- `evaluationDate = 2026-08-28` $\rightarrow$ 24 months $\rightarrow$ `TENURE_AT_LEAST(24)` is **true** $\rightarrow$ Extended Vacation (priority 60) activates and supersedes California Vacation (priority 50).
+- `evaluationDate = 2026-08-27` → 23 months → `TENURE_AT_LEAST(24)` is **false**
+- `evaluationDate = 2026-08-28` → 24 months → `TENURE_AT_LEAST(24)` is **true** → Extended Vacation (priority 60) activates and supersedes California Vacation (priority 50).
 
 ---
 
-## Reference Resolver (§38, §39)
+## Reference Resolver
 
 The `referenceResolver` is a deliberately minimal, unoptimized implementation of the resolution specification. It processes all rules without database indexes or dependency filtering, serving as the formal ground truth for verifying incremental reconciliation in Phase 9.

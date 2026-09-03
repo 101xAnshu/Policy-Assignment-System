@@ -2,8 +2,8 @@
  * Group API routes.
  *
  * GET    /api/groups                        — list groups with member count
- * POST   /api/groups/:id/members            — add member to group with outbox trigger (§26)
- * DELETE /api/groups/:id/members/:employeeId — remove member from group with outbox trigger (§26)
+ * POST   /api/groups/:id/members            — add member to group with outbox trigger
+ * DELETE /api/groups/:id/members/:employeeId — remove member from group with outbox trigger
  */
 
 import { Router, type Request, type Response } from "express";

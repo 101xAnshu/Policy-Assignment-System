@@ -1,6 +1,5 @@
 /**
  * Unit tests for the Pure Diff Engine.
- * Build Spec §21.
  *
  * Invariants:
  * - Adding new desired policies produces toAdd.

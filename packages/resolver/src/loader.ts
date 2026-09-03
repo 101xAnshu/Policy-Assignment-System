@@ -1,6 +1,5 @@
 /**
  * Database Loaders for Point-in-Time Policy Resolution.
- * Build Spec §12, §15.
  *
  * Assembles the EmployeeContext and EvaluatableRule[] from PostgreSQL
  * valid at a specific point in time [validFrom, validTo).

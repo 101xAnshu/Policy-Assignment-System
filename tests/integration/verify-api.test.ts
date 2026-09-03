@@ -1,6 +1,5 @@
 /**
  * Integration test for POST /api/system/verify-incremental.
- * Build Spec §41.
  *
  * Verifies that the endpoint runs 50 mutation scenarios and proves
  * that incremental scoped reconciliation strictly equals full clean-room recomputation.
@@ -34,7 +33,7 @@ afterAll(async () => {
   await sql.end();
 });
 
-describe("POST /api/system/verify-incremental (§41)", () => {
+describe("POST /api/system/verify-incremental", () => {
   it("executes 50 random mutations and mathematically proves incremental vs full recompute equality", async () => {
     const res = await fetch(`${baseUrl}/api/system/verify-incremental`, {
       method: "POST",

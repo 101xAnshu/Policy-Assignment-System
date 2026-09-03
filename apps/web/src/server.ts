@@ -1,6 +1,5 @@
 /**
  * API Server entry point.
- * Build Spec §29.
  */
 
 import { app } from "./app";

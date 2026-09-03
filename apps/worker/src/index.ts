@@ -1,6 +1,5 @@
 /**
  * Asynchronous Background Worker.
- * Build Spec §25, §26, §27.
  *
  * Continuously polls outbox_events and temporal_jobs with native PostgreSQL coordination.
  * Features:

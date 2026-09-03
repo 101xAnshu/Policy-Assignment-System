@@ -1,11 +1,8 @@
 /**
  * Predicate grammar for the Policy Assignment System.
  *
- * Build Spec §10 — Constrained predicate AST.
- * Build Spec §11 — Dependency extraction.
- *
  * Design decisions:
- * - Only the predicates from the spec are supported: ALL, EQUALS, IS_MANAGER, GROUP_MEMBER, TENURE_AT_LEAST
+ * - Only these predicates are supported: ALL, EQUALS, IS_MANAGER, GROUP_MEMBER, TENURE_AT_LEAST
  * - ALL with zero children is vacuously true (matches all employees)
  * - No generalized expression language, no arbitrary executable rules
  * - Each predicate is serializable, validated, versioned, deterministic, inspectable, explainable
@@ -51,7 +48,6 @@ export interface GroupMemberPredicate {
 /**
  * TENURE_AT_LEAST — employee's tenure must be >= durationMonths.
  *
- * Build Spec §16: TENURE_AT_LEAST(24 months) is inclusive.
  * If hireDate = 2024-08-28, the condition becomes true at 2026-08-28.
  */
 export interface TenureAtLeastPredicate {
@@ -73,8 +69,6 @@ export type Predicate =
 export type EmployeeField = "country" | "state" | "department" | "employmentType" | "isManager";
 
 /**
- * Build Spec §11 — DependencySet
- *
  * Extracted from a predicate to determine which changes
  * require re-evaluation of a rule.
  *

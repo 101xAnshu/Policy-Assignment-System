@@ -4,7 +4,6 @@ import { employees } from "./employees";
 
 /**
  * Groups table.
- * Build Spec §8.
  */
 export const groups = pgTable("groups", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -17,7 +16,6 @@ export const groups = pgTable("groups", {
 
 /**
  * Group memberships table.
- * Build Spec §8.
  *
  * Temporal: [validFrom, validTo) half-open interval.
  * validTo = null means "currently a member".

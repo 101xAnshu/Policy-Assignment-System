@@ -1,6 +1,5 @@
 /**
  * Scenario Test: Rule Lifecycle & Dynamic Mutation.
- * Build Spec §40.
  *
  * Tests:
  * 1. Rule priority change: Updating rule priority overrides previously winning policies in ONE categories.
@@ -50,7 +49,7 @@ afterAll(async () => {
   await sql.end();
 });
 
-describe("Scenario: Rule Priority & Predicate Changes (§40)", () => {
+describe("Scenario: Rule Priority & Predicate Changes", () => {
   it("Scenario 1: Rule Priority Change — Upgrading Standard Vacation priority from 10 to 70 overrides California Vacation (50)", async () => {
     const evalDate = "2024-08-28";
 

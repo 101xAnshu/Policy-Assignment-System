@@ -1,6 +1,5 @@
 /**
  * System Verification & Incremental Equivalence API route.
- * Build Spec §41.
  *
  * POST /api/system/verify-incremental
  *
@@ -34,7 +33,7 @@ const CATEGORIES = [
 
 const GROUPS = ["grp-mgr", "grp-exec", "grp-oncall"];
 
-// ─── POST /api/system/verify-incremental (§41) ───────────────────────────────
+// ─── POST /api/system/verify-incremental ───────────────────────────────
 
 verifyRoutes.post("/system/verify-incremental", async (_req: Request, res: Response) => {
   const startTime = Date.now();

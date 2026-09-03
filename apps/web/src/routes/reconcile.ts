@@ -1,6 +1,5 @@
 /**
  * Reconciliation & Worker API routes.
- * Build Spec §23, §24, §25, §26, §27, §29.
  *
  * GET  /api/employees/:id/reconcile/preview — preview diff without applying changes
  * POST /api/employees/:id/reconcile         — apply reconciliation for an employee

@@ -1,6 +1,5 @@
 /**
  * Integration tests for the Resolution API.
- * Build Spec §12, §14, §29, §42, §43.
  *
  * Tests live point-in-time policy resolution for the Acme tenant:
  * - Sarah Chen at hire date (2024-08-28): CA Vacation (50) beats Standard Vacation (10), Standard Sick, US Bi-weekly, CA Workplace Training, Manager Training, Engineering Stipend
@@ -41,7 +40,7 @@ afterAll(async () => {
 });
 
 describe("GET /api/employees/:id/resolve", () => {
-  it("resolves Sarah Chen's initial policies on hire date (2024-08-28) matching exact Demo Scenario §43", async () => {
+  it("resolves Sarah Chen's initial policies on hire date (2024-08-28) matching exact Demo Scenario", async () => {
     const res = await fetch(
       `${baseUrl}/api/employees/${IDS.sarah}/resolve?at=2024-08-28`,
     );
@@ -54,7 +53,7 @@ describe("GET /api/employees/:id/resolve", () => {
 
     const policyIds = data.assignments.map((a: { policyId: string }) => a.policyId);
 
-    // Build Spec §43 exact expected initial policies:
+    // 
     // 1. California Vacation (CA Full-time beats Standard Vacation)
     // 2. Standard Sick
     // 3. US Bi-weekly

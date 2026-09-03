@@ -1,6 +1,5 @@
 /**
  * Unit tests for the Predicate Evaluator & Tenure Calculations.
- * Build Spec §10, §16.
  */
 
 import { describe, it, expect } from "vitest";
@@ -23,7 +22,7 @@ const baseEmployee: EmployeeContext = {
   groupIds: ["g-managers" as any],
 };
 
-// ─── Tenure Calculation (§16) ────────────────────────────────────────────────
+// ─── Tenure Calculation ────────────────────────────────────────────────
 
 describe("computeTenureMonths", () => {
   it("calculates exact 24 months for 2024-08-28 to 2026-08-28 (inclusive)", () => {

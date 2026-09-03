@@ -1,6 +1,5 @@
 /**
  * Policy and PolicyCategory API routes.
- * Build Spec §29.
  *
  * GET /api/policies            — list policies (with category info)
  * GET /api/policy-categories   — list categories

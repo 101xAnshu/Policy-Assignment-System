@@ -1,6 +1,5 @@
 /**
  * Point-in-Time Timeline Reconstruction.
- * Build Spec §28, §29.
  *
  * Merges employee attribute changes, policy assignment lifecycles, and audit records
  * into a single unified chronological timeline for complete historic visibility.

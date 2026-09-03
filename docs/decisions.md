@@ -1,6 +1,6 @@
 # Design Decisions
 
-## Phase 1
+## Final Architecture (what shipped)
 
 ### 1. Branded ID types
 **Decision:** Use TypeScript branded types for all entity IDs (e.g., `EmployeeId`, `PolicyId`).
@@ -12,7 +12,7 @@
 
 ### 3. Cardinality on PolicyCategory, not on rules
 **Decision:** The `cardinality` field lives on `PolicyCategory`, not on individual `AssignmentRule` records.
-**Why:** Cardinality is a property of the business domain ("Vacation is one-of"), not of a specific rule. All rules in the same category must obey the same cardinality constraint.
+**Why:** Cardinality is a property of the business domain ("Vacation is one-of"), not of a specific rule. All rules in the same category must obey the same cardinality constraint. Enforcement is application-level (resolver + diff + direct-POST 409); no DB exclusion constraint was added.
 
 ### 4. Priority on AssignmentRuleVersion, not on AssignmentRule
 **Decision:** `priority` is a field on `AssignmentRuleVersion`, not on the rule identity.
@@ -22,9 +22,9 @@
 **Decision:** Use an `employee_versions` table with temporal validity rather than tracking changes through audit events.
 **Why:** Point-in-time resolution requires efficiently querying "what was this employee's state on date X?" A dedicated temporal table with `[validFrom, validTo)` intervals supports this directly, while reconstructing state from an audit log would be expensive and fragile.
 
-### 6. Express for Phase 1 API
-**Decision:** Use a lightweight Express server rather than initializing Next.js from day one.
-**Why:** Phase 1 only needs API endpoints. Express gives us a working API in minutes without the overhead of a full React framework. The API will be refactored into Next.js API routes in Phase 7 when the frontend is built.
+### 6. Express + Vite SPA (final; Next.js not adopted)
+**Decision:** Ship Express 4 JSON API plus a Vite React 19 SPA (dev `:3000` proxying `/api` to `:3001`; production bundle served statically by Express). Keep this instead of migrating to Next.js.
+**Why:** The Express API already worked and the Vite build covers every demo flow. A framework migration added risk without new capability. The original "refactor to Next.js in Phase 7" plan is superseded.
 
 ### 7. ALL with empty children = match all employees
 **Decision:** `{ type: "ALL", children: [] }` is vacuously true (matches every employee).
@@ -41,3 +41,23 @@
 ### 10. Separate business-effective dates from system timestamps
 **Decision:** Use `date` for business-effective dates and `timestamp with time zone` for system timestamps.
 **Why:** Business dates (when a policy takes effect) are calendar-day concepts independent of timezone. System timestamps (when a record was created) need timezone awareness. Conflating these leads to subtle bugs around midnight boundaries.
+
+### 11. Bounded worker leases instead of a broker
+**Decision:** Add `attempts` + `last_error` to `outbox_events` / `temporal_jobs`; treat `claimed_at` as a reclaimable lease (default 5 min) with `MAX_CLAIM_ATTEMPTS` 10; release the lease on failure; park exhausted rows unprocessed.
+**Why:** Counting deliveries requires worker state, and crashes never reach a failure handler — so the count must increment on claim. This yields bounded at-least-once delivery on Postgres alone. No Kafka/Redis/SQS.
+
+### 12. Per-employee isolation in company reconciliation
+**Decision:** `reconcileCompany` collects `failures[]` per employee instead of throwing on the first error; a partially-failed `RULE_PUBLISHED` event fails and retries (successes replay as no-ops).
+**Why:** One poison employee must not block the company, but its work must remain retryable. Idempotent convergence makes whole-company retry safe.
+
+### 13. Explicit-version publish with stale/duplicate guards
+**Decision:** `POST /versions` drafts `max+1` with validated predicate + stored dependencies and no event; `POST /publish` requires (or defaults to) an explicit version, rejects non-latest with 409, and treats republishing current as idempotent `duplicate:true` with no second event.
+**Why:** The original latest-only publish could not express intent and re-emitted events on duplicates. Explicit versions make "edit → preview → publish → reconcile" demonstrable via API/UI.
+
+### 14. Constrained rule authoring (no DSL expansion)
+**Decision:** UI builders support single `EQUALS` or `ALL (everyone)` only; `IS_MANAGER` / `GROUP_MEMBER` / `TENURE_AT_LEAST` remain API/seed-capable with no visual builder and no OR/NOT.
+**Why:** Covers the priority-change and broaden-to-everyone demos without growing a generalized expression language the assignment forbids.
+
+### 15. Test-only failure hooks
+**Decision:** `failForEmployeeIds` options on `reconcileCompany` / `processDueTemporalJobs` exist only for deterministic durability tests.
+**Why:** Foreign keys make real per-employee poison hard to construct; the hooks prove isolation and retry without touching resolver semantics or production paths.

@@ -1,15 +1,14 @@
 /**
  * Domain types for the Policy Assignment System.
  *
- * These types represent the core entities described in Build Spec §6–§9, §14, §17–§18.
- * They are pure data definitions — no database or framework dependencies.
+ * Core domain entities as pure data definitions — no database or framework dependencies.
  *
  * Key design decisions:
  * - IDs are branded strings for type safety (prevents passing an employeeId where a policyId is expected)
- * - Cardinality is on PolicyCategory, not on individual rules (§7)
- * - EmployeeVersion captures valid-time history (§6)
+ * - Cardinality is on PolicyCategory, not on individual rules
+ * - EmployeeVersion captures valid-time history
  * - AssignmentRuleVersion is immutable once published (P7)
- * - PolicyAssignment includes explanationSnapshot for stable historical explanations (§18)
+ * - PolicyAssignment includes explanationSnapshot for stable historical explanations
  */
 
 // ─── Branded ID types ────────────────────────────────────────────────────────
@@ -47,15 +46,13 @@ export type CandidateOutcome = "WINNER" | "OVERRIDDEN" | "TIED";
 
 // ─── Core Entities ───────────────────────────────────────────────────────────
 
-/** Build Spec §6 — Company */
+/** Company */
 export interface Company {
   id: CompanyId;
   name: string;
 }
 
 /**
- * Build Spec §6 — Employee (current state)
- *
  * The current Employee record is the latest state.
  * Historical state is captured in EmployeeVersion.
  */
@@ -76,8 +73,6 @@ export interface Employee {
 }
 
 /**
- * Build Spec §6 — EmployeeVersion (valid-time historical state)
- *
  * Each version captures the employee's attributes over a half-open interval [validFrom, validTo).
  * validTo = null means "current / no known end date".
  */
@@ -99,8 +94,6 @@ export interface EmployeeVersion {
 // ─── Policy Model ────────────────────────────────────────────────────────────
 
 /**
- * Build Spec §7 — PolicyCategory
- *
  * Cardinality belongs to the category, not to individual rules.
  * ONE = at most one active assignment per employee in this category.
  * MANY = multiple policies can coexist.
@@ -113,7 +106,7 @@ export interface PolicyCategory {
   cardinality: Cardinality;
 }
 
-/** Build Spec §7 — Policy */
+/** Policy */
 export interface Policy {
   id: PolicyId;
   categoryId: PolicyCategoryId;
@@ -123,7 +116,7 @@ export interface Policy {
 
 // ─── Groups ──────────────────────────────────────────────────────────────────
 
-/** Build Spec §8 — Group */
+/** Group */
 export interface Group {
   id: GroupId;
   companyId: CompanyId;
@@ -131,8 +124,6 @@ export interface Group {
 }
 
 /**
- * Build Spec §8 — GroupMembership
- *
  * Temporal: [validFrom, validTo) half-open interval.
  * validTo = null means "currently a member".
  */
@@ -146,8 +137,6 @@ export interface GroupMembership {
 // ─── Rules ───────────────────────────────────────────────────────────────────
 
 /**
- * Build Spec §9 — AssignmentRule (stable identity)
- *
  * The rule itself holds identity and status.
  * All behavioral properties (predicate, priority, effective dates) live on the version.
  */
@@ -164,8 +153,6 @@ export interface AssignmentRule {
 }
 
 /**
- * Build Spec §9 — AssignmentRuleVersion (immutable)
- *
  * Once published, a version is never mutated (P7).
  * Priority belongs to the version because a published rule's behavior must be immutable.
  *
@@ -188,12 +175,10 @@ export interface AssignmentRuleVersion {
 // ─── Assignments ─────────────────────────────────────────────────────────────
 
 /**
- * Build Spec §17 — PolicyAssignment (materialized actual state)
- *
  * Assignments are derived state: rules + employee state + time → desired → reconciled → persisted.
  * For ONE categories, overlapping intervals must be prevented transactionally.
  *
- * explanationSnapshot captures the full resolution context at assignment time (§18).
+ * explanationSnapshot captures the full resolution context at assignment time.
  */
 export interface PolicyAssignment {
   id: PolicyAssignmentId;
@@ -210,8 +195,6 @@ export interface PolicyAssignment {
 }
 
 /**
- * Build Spec §18 — ExplanationSnapshot
- *
  * Persisted with each assignment so historical explanations remain stable
  * even if rules are later modified or archived.
  */
@@ -233,8 +216,6 @@ export interface MatchedRuleSnapshot {
 // ─── Resolver Output ─────────────────────────────────────────────────────────
 
 /**
- * Build Spec §14 — ResolutionResult
- *
  * The pure output of resolve(employee, rules, at).
  * Contains both the computed desired assignments and the decision trail.
  */
@@ -243,7 +224,7 @@ export interface ResolutionResult {
   decisions: Decision[];
 }
 
-/** Build Spec §14 — DesiredAssignment */
+/** DesiredAssignment */
 export interface DesiredAssignment {
   employeeId: EmployeeId;
   policyId: PolicyId;
@@ -254,8 +235,6 @@ export interface DesiredAssignment {
 }
 
 /**
- * Build Spec §14 — Decision
- *
  * One decision per policy category per resolution.
  * Captures all candidates, the winner (if any), and the reason.
  */
@@ -281,8 +260,6 @@ export interface CandidateDecision {
 // ─── Reconciliation ──────────────────────────────────────────────────────────
 
 /**
- * Build Spec §19 — AssignmentDiff
- *
  * The diff between desired and actual state.
  * Used by the reconciler to apply minimal changes.
  */
@@ -296,11 +273,9 @@ export interface AssignmentDiff {
 // ─── Audit ───────────────────────────────────────────────────────────────────
 
 /**
- * Build Spec §28 — AuditEvent
- *
  * effectiveAt = when the change takes business effect
  * recordedAt = when the system recorded it (wall clock)
- * These are explicitly distinct (§28).
+ * These are explicitly distinct.
  */
 export type AuditEventType =
   | "EMPLOYEE_CREATED"
@@ -326,7 +301,7 @@ export interface AuditEvent {
 
 // ─── Outbox ──────────────────────────────────────────────────────────────────
 
-/** Build Spec §26 — Transactional outbox event */
+/** Transactional outbox event */
 export type OutboxEventType =
   | "EMPLOYEE_CREATED"
   | "EMPLOYEE_UPDATED"
@@ -346,8 +321,6 @@ export interface OutboxEvent {
 // ─── Temporal Jobs ───────────────────────────────────────────────────────────
 
 /**
- * Build Spec §24 — TemporalJob
- *
  * Scheduled reconciliation triggers (e.g., tenure threshold, future-dated changes).
  * Worker periodically claims due jobs.
  */

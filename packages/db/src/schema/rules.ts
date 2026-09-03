@@ -14,7 +14,6 @@ import { policyCategories } from "./policies";
 
 /**
  * Assignment rules table — stable identity.
- * Build Spec §9.
  *
  * The rule itself holds identity and status.
  * All behavioral properties live on the version (immutable once published).
@@ -47,7 +46,6 @@ export const assignmentRules = pgTable(
 
 /**
  * Assignment rule versions table — immutable.
- * Build Spec §9.
  *
  * Once published, a version is never mutated (P7).
  * Priority belongs to the version because a published rule's behavior must be immutable.
@@ -55,8 +53,8 @@ export const assignmentRules = pgTable(
  * effectiveFrom/effectiveTo: half-open [from, to) intervals.
  * effectiveTo = null means "no expiration".
  *
- * predicate: JSONB containing the Predicate AST (§10).
- * dependencies: JSONB containing the DependencySet (§11).
+ * predicate: JSONB containing the Predicate AST.
+ * dependencies: JSONB containing the DependencySet.
  */
 export const assignmentRuleVersions = pgTable(
   "assignment_rule_versions",

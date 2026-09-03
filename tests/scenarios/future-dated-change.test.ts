@@ -1,6 +1,5 @@
 /**
  * Scenario Test: Future-Dated Employee Change Activation.
- * Build Spec §21, §27, §40.
  *
  * Tests:
  * 1. Future-dated employee change (effectiveAt > now) creates version + scheduled temporal job.
@@ -48,7 +47,7 @@ afterAll(async () => {
   await sql.end();
 });
 
-describe("Scenario: Future-Dated Employee Change Activation (§21, §40)", () => {
+describe("Scenario: Future-Dated Employee Change Activation", () => {
   it("Schedules future temporal job without prematurely altering current active policies", async () => {
     const currentDate = "2024-08-28";
     const futureDate = "2028-01-01";

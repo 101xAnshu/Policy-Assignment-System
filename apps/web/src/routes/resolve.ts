@@ -1,6 +1,5 @@
 /**
  * Resolution API routes.
- * Build Spec §12, §14, §29.
  *
  * GET  /api/employees/:id/resolve?at=...  — resolves point-in-time policies & decision explanation for an employee
  * POST /api/resolve                      — pure simulated resolution given employee context + date

@@ -1,6 +1,5 @@
 /**
  * Desired vs Actual Diff Engine.
- * Build Spec §21.
  *
  * Pure function: compares desired state from the Resolver against actual materialized
  * assignments in PostgreSQL to produce the minimal convergent diff.
@@ -62,7 +61,6 @@ export interface DiffResult {
 
 /**
  * Build an ExplanationSnapshot from a category's Decision.
- * Build Spec §18.
  */
 export function buildExplanationSnapshot(
   decision: Decision | undefined,
@@ -117,7 +115,6 @@ export function buildExplanationSnapshot(
 
 /**
  * Compute the diff between desired policy state and actual database state.
- * Build Spec §21.
  */
 export function computeDiff(
   desiredAssignments: DesiredAssignment[],

@@ -1,6 +1,5 @@
 /**
  * Scoped Incremental Reconciliation.
- * Build Spec §22, §26.
  *
  * Evaluates and reconciles only a specific subset of policy categories (e.g. Vacation & Training
  * when employee state changes from NY to CA), completely skipping all unaffected categories

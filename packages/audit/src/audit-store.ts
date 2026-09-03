@@ -1,6 +1,5 @@
 /**
  * Audit Store Querying.
- * Build Spec §28.
  *
  * Query and filter audit trail records with pagination.
  */

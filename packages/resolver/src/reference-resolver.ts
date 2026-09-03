@@ -1,12 +1,11 @@
 /**
  * Independent Reference Resolver.
- * Build Spec §38, §39.
  *
  * A deliberately simple, unoptimized, clean-room brute-force evaluator.
  * It does NOT use the production resolver, does NOT use dependency optimization,
  * and directly tests predicate logic from foundational mathematical definitions.
  *
- * Used as the trusted oracle in property-based testing (§39) and verification (§41)
+ * Used as the trusted oracle in property-based testing and verification
  * to prove that the production resolver and incremental reconciliation are 100% sound.
  */
 
@@ -35,7 +34,6 @@ function toDateString(date: string | Date): string {
 
 /**
  * Calculate tenure in full calendar months with inclusive day-of-month math.
- * Build Spec §16: hire 2024-08-28 -> active at 2026-08-28 (24 months).
  */
 function computeTenureMonths(hireDateStr: string, evalDateStr: string): number {
   const [hY, hM, hD] = hireDateStr.split("-").map(Number);

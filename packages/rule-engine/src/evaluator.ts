@@ -1,6 +1,5 @@
 /**
  * Predicate Evaluator for the Policy Assignment System.
- * Build Spec §10, §16.
  *
  * Evaluates a predicate AST against an employee context at a specific evaluation date.
  * Pure function: deterministic, side-effect free.
@@ -20,7 +19,6 @@ export interface PredicateEvaluationResult {
 
 /**
  * Calculate completed months of tenure between hireDate and evaluationDate.
- * Build Spec §16:
  * - Inclusive calculation.
  * - If hireDate = "2024-08-28", on "2026-08-28" the tenure is exactly 24 months.
  */

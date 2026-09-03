@@ -12,13 +12,12 @@ import { companies } from "./companies";
 
 /**
  * Employees table — current state.
- * Build Spec §6.
  *
  * The current Employee record is always the latest state.
  * Historical state is captured in employee_versions.
  *
  * `version` is incremented on every attribute change to support
- * optimistic concurrency and stale-event detection (§27).
+ * optimistic concurrency and stale-event detection.
  */
 export const employees = pgTable(
   "employees",
@@ -50,7 +49,6 @@ export const employees = pgTable(
 
 /**
  * Employee versions — valid-time historical state.
- * Build Spec §6.
  *
  * Each version captures the employee's attributes over a half-open interval [validFrom, validTo).
  * validTo = null means "current / no known end date".

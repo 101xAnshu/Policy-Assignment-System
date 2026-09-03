@@ -1,6 +1,5 @@
 /**
  * Unit tests for In-Memory Dependency Index.
- * Build Spec §22, §26.
  *
  * Invariants:
  * - Attribute indexing maps field names to rule IDs and categories.

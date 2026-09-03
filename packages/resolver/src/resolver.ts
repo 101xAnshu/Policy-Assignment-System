@@ -1,6 +1,5 @@
 /**
  * Deterministic Policy Resolver.
- * Build Spec §12, §13, §14, §15.
  *
  * Given:
  * - employee: EmployeeContext
@@ -39,7 +38,6 @@ export function formatDate(date: string | Date): string {
 
 /**
  * Check if a rule is temporally active at the given date.
- * Build Spec §15: Half-open interval [effectiveFrom, effectiveTo)
  * effectiveFrom <= at AND (effectiveTo IS NULL OR at < effectiveTo)
  */
 export function isRuleActiveAt(rule: EvaluatableRule, at: string): boolean {
@@ -54,7 +52,6 @@ export function isRuleActiveAt(rule: EvaluatableRule, at: string): boolean {
 
 /**
  * Core Deterministic Resolver.
- * Build Spec §12, §13.
  */
 export function resolve(
   employee: EmployeeContext,
@@ -132,7 +129,7 @@ export function resolve(
     }
 
     if (cat.cardinality === "ONE") {
-      // ─── ONE Category Resolution (§13) ─────────────────────────────────────
+      // ─── ONE Category Resolution ─────────────────────────────────────
       // Sort candidates by: priority DESC, then ruleId ASC
       cat.matches.sort((a, b) => {
         if (b.rule.priority !== a.rule.priority) {
@@ -155,7 +152,7 @@ export function resolve(
       );
 
       if (distinctTopPolicies.size > 1) {
-        // AMBIGUITY DETECTED (§13)
+        // AMBIGUITY DETECTED
         // Two or more rules with equal highest priority assign conflicting policies
         const candidates: CandidateDecision[] = cat.matches.map((m) => {
           const isTopTier = m.rule.priority === highestPriority;
@@ -227,7 +224,7 @@ export function resolve(
         });
       }
     } else {
-      // ─── MANY Category Resolution (§13) ────────────────────────────────────
+      // ─── MANY Category Resolution ────────────────────────────────────
       // All matching policies are assigned; duplicates are deduplicated
       // Sort matches by policyId ASC, then priority DESC
       cat.matches.sort((a, b) => {

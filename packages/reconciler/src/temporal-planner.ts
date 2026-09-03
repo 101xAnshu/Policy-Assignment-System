@@ -1,6 +1,5 @@
 /**
  * Temporal Planner & Milestone Scheduler.
- * Build Spec §16, §27.
  *
  * Discovers future temporal trigger points (e.g., employee reaching 24 months tenure)
  * and schedules idempotent execution entries into the temporal_jobs table.

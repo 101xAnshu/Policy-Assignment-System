@@ -1,6 +1,5 @@
 /**
  * Scenario Test: Group Membership Lifecycle.
- * Build Spec §40.
  *
  * Tests:
  * 1. Group membership added -> outbox event created -> scoped reconciler triggers -> Manager Training assigned.
@@ -45,7 +44,7 @@ afterAll(async () => {
   await sql.end();
 });
 
-describe("Scenario: Group Membership Lifecycle (§40)", () => {
+describe("Scenario: Group Membership Lifecycle", () => {
   it("Scenario 1: Adding employee to Managers group assigns Manager Training via scoped reconciliation", async () => {
     const evalDate = "2024-08-28";
 

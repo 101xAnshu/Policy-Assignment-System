@@ -1,6 +1,5 @@
 /**
  * Express application definition.
- * Build Spec §29.
  *
  * Configures middleware, routes, static frontend assets, and error handling.
  */

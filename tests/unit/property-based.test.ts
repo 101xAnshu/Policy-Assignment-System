@@ -1,6 +1,5 @@
 /**
  * Property-Based Testing Suite with fast-check.
- * Build Spec §38, §39.
  *
  * Mathematically verifies core invariant properties:
  * 1. Determinism across all arbitrary rule evaluation permutations.

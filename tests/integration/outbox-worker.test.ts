@@ -1,6 +1,5 @@
 /**
  * Integration tests for Outbox Pattern & Background Worker.
- * Build Spec §25, §26, §27, §42, §43.
  *
  * Tests:
  * 1. Mutations write events to outbox_events in the same transaction.

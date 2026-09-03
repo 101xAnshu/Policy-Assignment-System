@@ -1,8 +1,7 @@
 /**
  * Audit & "Why?" Explainability API routes.
- * Build Spec §28, §29.
  *
- * GET /api/employees/:id/why?policyId=...&at=... — Explainability endpoint (§28)
+ * GET /api/employees/:id/why?policyId=...&at=... — Explainability endpoint
  * GET /api/employees/:id/timeline                — Reconstructed employee history timeline
  * GET /api/audit                                 — Query audit log with filters
  * GET /api/audit/:id                             — Get single audit event by ID

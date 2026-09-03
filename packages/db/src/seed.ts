@@ -1,9 +1,7 @@
 /**
  * Seed data for the Acme demo tenant.
- * Build Spec §42–§43.
  *
- * This seed creates one coherent demo environment that supports the exact
- * demo scenario described in §43 (Sarah Chen's journey).
+ * This seed creates one coherent demo environment for Sarah Chen's journey.
  *
  * Deliberate design in the seed data:
  * - Priority conflict: CA Vacation (priority 50) vs Standard Vacation (priority 10) — tests conflict resolution

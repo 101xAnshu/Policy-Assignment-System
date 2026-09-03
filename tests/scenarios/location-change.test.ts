@@ -1,6 +1,5 @@
 /**
  * Scenario Test: Location Change & Preview-then-Apply Flow.
- * Build Spec §32, §42, §43 (Sarah Chen's Journey Steps 2–3).
  *
  * Tests:
  * 1. Simulating relocation from California to New York previews exact added / revoked / unchanged diff.
@@ -45,7 +44,7 @@ afterAll(async () => {
   await sql.end();
 });
 
-describe("Scenario: Sarah Chen Relocation (California → New York, §43 Steps 2–3)", () => {
+describe("Scenario: Sarah Chen Relocation (California → New York,Steps 2–3)", () => {
   it("Previews exact diff before applying, then converges database atomically", async () => {
     const evalDate = "2024-08-28";
 
@@ -63,7 +62,7 @@ describe("Scenario: Sarah Chen Relocation (California → New York, §43 Steps 2
     expect(initialPolicyIds).toContain(IDS.caWorkplaceTraining);
     expect(initialPolicyIds).not.toContain(IDS.standardVacation);
 
-    // 2. Run simulation preview for California -> New York (§32)
+    // 2. Run simulation preview for California -> New York
     const previewRes = await fetch(`${baseUrl}/api/employees/${IDS.sarah}/preview-change`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

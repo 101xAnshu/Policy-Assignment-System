@@ -1,6 +1,5 @@
 /**
  * In-Memory Dependency Index for Scoped Incremental Reconciliation.
- * Build Spec §22, §26.
  *
  * Principles:
  * P3 — Dependency Indexing: Index predicates by referenced attributes, groups, and temporal dependencies.
