@@ -1,6 +1,5 @@
 /**
  * Idempotent Reconciliation Engine.
- * Build Spec §19, §20, §24, §25.
  *
  * Coordinates point-in-time state loading, deterministic resolution,
  * diff calculation, and atomic transactional database convergence.
@@ -47,11 +46,12 @@ export interface CompanyReconcileResult {
   totalUpdated: number;
   totalUnchanged: number;
   employeeResults: ReconcileResult[];
+  failedCount: number;
+  failures: Array<{ employeeId: string; error: string }>;
 }
 
 /**
  * Preview reconciliation changes for an employee without applying to the database.
- * Build Spec §23.
  */
 export async function previewReconcile(
   employeeId: string,
@@ -92,7 +92,6 @@ export async function previewReconcile(
 
 /**
  * Transactionally reconcile an employee's materialized assignments.
- * Build Spec §24.
  */
 export async function reconcileEmployee(
   employeeId: string,
@@ -261,12 +260,19 @@ export async function reconcileEmployee(
 
 /**
  * Reconcile all employees across a company.
- * Build Spec §24.
+ *
+ * Failure isolation: one employee's failure must not abort the loop.
+ * Each employee is reconciled independently; failures are collected into
+ * `failures` (with `failedCount`) while successes still contribute to totals.
+ * Callers (e.g. the outbox RULE_PUBLISHED handler) decide whether partial
+ * failure should fail the triggering event for retry. Failed employees remain
+ * retryable via a later `reconcileEmployee` / `reconcileCompany` call because
+ * reconciliation is idempotent and reads authoritative state.
  */
 export async function reconcileCompany(
   companyId: string,
   at: string | Date,
-  options?: { actor?: string },
+  options?: { actor?: string; failForEmployeeIds?: string[] },
 ): Promise<CompanyReconcileResult> {
   const atStr = formatDate(at);
 
@@ -280,14 +286,28 @@ export async function reconcileCompany(
   let totalUpdated = 0;
   let totalUnchanged = 0;
   const employeeResults: ReconcileResult[] = [];
+  const failures: Array<{ employeeId: string; error: string }> = [];
+
+  const failSet = new Set(options?.failForEmployeeIds ?? []);
 
   for (const emp of allEmployees) {
-    const res = await reconcileEmployee(emp.id, atStr, options);
-    totalAdded += res.diff.summary.added;
-    totalRevoked += res.diff.summary.revoked;
-    totalUpdated += res.diff.summary.updated;
-    totalUnchanged += res.diff.summary.unchanged;
-    employeeResults.push(res);
+    try {
+      // Test-only deterministic failure injection (durability tests).
+      // Never set in production; used to prove per-employee isolation.
+      if (failSet.has(emp.id)) {
+        throw new Error(`Injected failure for durability test (employee ${emp.id})`);
+      }
+      const res = await reconcileEmployee(emp.id, atStr, options);
+      totalAdded += res.diff.summary.added;
+      totalRevoked += res.diff.summary.revoked;
+      totalUpdated += res.diff.summary.updated;
+      totalUnchanged += res.diff.summary.unchanged;
+      employeeResults.push(res);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(`[reconcileCompany] employee ${emp.id} failed, continuing:`, message);
+      failures.push({ employeeId: emp.id, error: message.slice(0, 1000) });
+    }
   }
 
   return {
@@ -299,6 +319,8 @@ export async function reconcileCompany(
     totalUpdated,
     totalUnchanged,
     employeeResults,
+    failedCount: failures.length,
+    failures,
   };
 }
 

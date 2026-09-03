@@ -4,6 +4,8 @@ import {
   varchar,
   timestamp,
   index,
+  integer,
+  text,
 } from "drizzle-orm/pg-core";
 import { employees } from "./employees";
 
@@ -19,6 +21,8 @@ export const temporalJobs = pgTable(
     processedAt: timestamp("processed_at", { withTimezone: true }),
     claimedAt: timestamp("claimed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    attempts: integer("attempts").notNull().default(0),
+    lastError: text("last_error"),
   },
   (table) => ({
     idxTemporalJobsDue: index("idx_temporal_jobs_due").on(table.triggerAt, table.processedAt),

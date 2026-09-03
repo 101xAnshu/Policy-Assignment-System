@@ -34,5 +34,10 @@ export {
 export {
   processNextOutboxEvents,
   processDueTemporalJobs,
+  STALE_CLAIM_TIMEOUT_MS,
+  MAX_CLAIM_ATTEMPTS,
   type OutboxProcessSummary,
+  type OutboxProcessOptions,
+  type TemporalProcessSummary,
+  type TemporalProcessOptions,
 } from "./outbox-processor";
