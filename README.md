@@ -232,33 +232,44 @@ Rule archetypes in seed: CA-vs-Standard priority conflict (Vacation `ONE`), tenu
 
 ---
 
-## Quickstart & Getting Started
+## Run Locally (verified from a clean checkout)
 
 ### 1. Prerequisites
-- Node.js >= 20
-- PostgreSQL 16 (Docker Compose maps `5433:5432` by default)
+- Node.js >= 20 (`node --version`)
+- Docker running (`docker --version`) — for PostgreSQL 16
+- Free ports: `5433` (Postgres), `3001` (API), `3000` (UI)
+- No `.env` file needed. Defaults work out of the box; overrides are optional:
+  - `DATABASE_URL` (default `postgresql://warp:warp_local@127.0.0.1:5433/warp_dev`)
+  - `PORT` (API port, default `3000` — set `3001` when running alongside the UI)
+  - `POLL_INTERVAL_MS` (worker poll cadence, default `1000`)
 
-### 2. Environment Setup
+### 2. Install
 ```bash
+git clone <repo-url>
+cd policy-assignment-system
 npm install
 ```
 
-### 3. Database Migration & Seed
+### 3. Database
 ```bash
-npm run db:push
-npm run db:seed
+docker compose up -d        # first checkout only; starts Postgres on 5433
+npm run db:push             # apply schema (idempotent)
+npm run db:reset            # empty all tables (required when the volume already has data, harmless otherwise)
+npm run db:seed             # Acme tenant: 4 employees, 7 categories, 12 policies, 12 rules
 ```
 
-### 4. Run Test Suite
+### 4. Tests
 ```bash
-# 21 suites, 146 tests (unit + integration + scenarios)
+# 21 suites, 146 tests (unit + integration + scenarios, real Postgres + HTTP)
 npx vitest run
 ```
 
-### 5. Start Development Servers
+### 5. App + Worker (two terminals)
 ```bash
-# API defaults to PORT=3000 (set PORT=3001 when running alongside Vite on :3000)
-npm run dev
+# Terminal 1 — API on :3001 plus Vite UI on :3000 (proxies /api to :3001)
+PORT=3001 npm run dev:api
+# Terminal 2 — background reconciliation worker
+npm run dev:worker
 ```
 
-With the UI on `:3000` (Vite, proxying `/api` to `:3001`) and the API on `:3001`, visit **`http://localhost:3000`**. Run the worker with `npm run dev:worker`, or trigger `POST /api/worker/process-outbox` and `POST /api/worker/process-temporal` from the Reconciliation Center.
+Visit **`http://localhost:3000`**. Without the worker running, trigger reconciliation manually via `POST /api/worker/process-outbox` and `POST /api/worker/process-temporal` (the Reconciliation Center does this for you).
