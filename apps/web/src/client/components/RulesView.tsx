@@ -19,6 +19,7 @@ import {
   X,
   Eye,
 } from "lucide-react";
+import { useModalBehavior } from "../useModalBehavior";
 
 export const RulesView: React.FC = () => {
   const [rules, setRules] = useState<any[]>([]);
@@ -45,7 +46,7 @@ export const RulesView: React.FC = () => {
   const [publishingRuleId, setPublishingRuleId] = useState<string | null>(null);
   const [publishing, setPublishing] = useState<boolean>(false);
 
-  // New-version (edit lifecycle) modal — constrained to the spec grammar:
+  // New-version (edit lifecycle) modal — constrained grammar:
   // single EQUALS condition or ALL (everyone). No OR/NOT, no DSL.
   const [showVersionModal, setShowVersionModal] = useState<boolean>(false);
   const [editingRule, setEditingRule] = useState<any | null>(null);
@@ -61,6 +62,11 @@ export const RulesView: React.FC = () => {
   const [showHistoryModal, setShowHistoryModal] = useState<boolean>(false);
   const [historyData, setHistoryData] = useState<any | null>(null);
   const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
+
+  useModalBehavior(() => setShowCreateModal(false), showCreateModal);
+  useModalBehavior(() => setShowImpactModal(false), showImpactModal && !publishing);
+  useModalBehavior(() => setShowVersionModal(false), showVersionModal);
+  useModalBehavior(() => setShowHistoryModal(false), showHistoryModal);
 
   const loadData = async () => {
     const [rData, pData, cData] = await Promise.all([
@@ -355,8 +361,14 @@ export const RulesView: React.FC = () => {
 
       {/* Impact preview modal */}
       {showImpactModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-xl bg-surface border border-border rounded-lg shadow-xl overflow-hidden flex flex-col max-h-[85vh]">
+        <div
+          className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4"
+          onClick={() => { if (!publishing) setShowImpactModal(false); }}
+        >
+          <div
+            className="w-full max-w-xl bg-surface border border-border rounded-lg shadow-xl overflow-hidden flex flex-col max-h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-5 py-4 border-b border-border flex items-center justify-between">
               <div>
                 <h3 className="font-heading text-[15px] font-semibold text-primary">Rule impact preview</h3>
@@ -455,8 +467,11 @@ export const RulesView: React.FC = () => {
 
       {/* Create rule modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-surface border border-border rounded-lg shadow-xl overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowCreateModal(false)}>
+          <div
+            className="w-full max-w-lg bg-surface border border-border rounded-lg shadow-xl overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-5 py-4 border-b border-border flex items-center justify-between">
               <h3 className="font-heading text-[15px] font-semibold text-primary">Create rule</h3>
               <button onClick={() => setShowCreateModal(false)} className="text-secondary hover:text-primary p-1">
@@ -520,8 +535,8 @@ export const RulesView: React.FC = () => {
               </button>
               <button
                 onClick={handleCreateDraft}
-                disabled={creating}
-                className="px-3 py-1.5 rounded text-[13px] font-medium bg-accent hover:bg-accent-500 text-white transition-colors"
+                disabled={creating || !ruleName.trim()}
+                className="px-3 py-1.5 rounded text-[13px] font-medium bg-accent hover:bg-accent-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {creating ? "Creating..." : "Save as draft"}
               </button>
@@ -532,8 +547,11 @@ export const RulesView: React.FC = () => {
 
       {/* New version modal (edit lifecycle: draft vN+1, then preview → publish) */}
       {showVersionModal && editingRule && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-surface border border-border rounded-lg shadow-xl overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowVersionModal(false)}>
+          <div
+            className="w-full max-w-lg bg-surface border border-border rounded-lg shadow-xl overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-5 py-4 border-b border-border flex items-center justify-between">
               <div>
                 <h3 className="font-heading text-[15px] font-semibold text-primary">New version — {editingRule.name}</h3>
@@ -592,8 +610,8 @@ export const RulesView: React.FC = () => {
               </button>
               <button
                 onClick={handleSaveVersion}
-                disabled={savingVersion}
-                className="px-3 py-1.5 rounded text-[13px] font-medium bg-accent hover:bg-accent-500 text-white transition-colors"
+                disabled={savingVersion || (versionPredicateType === "EQUALS" && !versionFieldVal.trim())}
+                className="px-3 py-1.5 rounded text-[13px] font-medium bg-accent hover:bg-accent-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {savingVersion ? "Saving..." : "Save new draft version"}
               </button>
@@ -604,8 +622,11 @@ export const RulesView: React.FC = () => {
 
       {/* Version history modal (v1 + v2 inspection) */}
       {showHistoryModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-lg bg-surface border border-border rounded-lg shadow-xl overflow-hidden flex flex-col max-h-[80vh]">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowHistoryModal(false)}>
+          <div
+            className="w-full max-w-lg bg-surface border border-border rounded-lg shadow-xl overflow-hidden flex flex-col max-h-[80vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-5 py-4 border-b border-border flex items-center justify-between">
               <div>
                 <h3 className="font-heading text-[15px] font-semibold text-primary">Version history</h3>

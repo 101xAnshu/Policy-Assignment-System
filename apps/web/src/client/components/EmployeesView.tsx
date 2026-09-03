@@ -28,6 +28,7 @@ import {
   Clock,
 } from "lucide-react";
 import { WhyModal } from "./WhyModal";
+import { useModalBehavior } from "../useModalBehavior";
 
 export const EmployeesView: React.FC = () => {
   const [employees, setEmployees] = useState<any[]>([]);
@@ -61,6 +62,9 @@ export const EmployeesView: React.FC = () => {
   const [onboardPreview, setOnboardPreview] = useState<any | null>(null);
   const [loadingOnboardPreview, setLoadingOnboardPreview] = useState<boolean>(false);
   const [creatingEmp, setCreatingEmp] = useState<boolean>(false);
+
+  useModalBehavior(() => setShowEditModal(false), showEditModal);
+  useModalBehavior(() => setShowOnboardModal(false), showOnboardModal);
 
   const loadEmployees = async () => {
     const data = await fetchEmployees();
@@ -404,8 +408,11 @@ export const EmployeesView: React.FC = () => {
 
       {/* Edit attributes modal */}
       {showEditModal && selectedEmp && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-xl bg-surface border border-border rounded-lg shadow-xl overflow-hidden flex flex-col max-h-[85vh]">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowEditModal(false)}>
+          <div
+            className="w-full max-w-xl bg-surface border border-border rounded-lg shadow-xl overflow-hidden flex flex-col max-h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-5 py-4 border-b border-border flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Edit3 className="w-4 h-4 text-accent" />
@@ -506,8 +513,11 @@ export const EmployeesView: React.FC = () => {
 
       {/* Onboarding modal */}
       {showOnboardModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl bg-surface border border-border rounded-lg shadow-xl overflow-hidden flex flex-col max-h-[85vh]">
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowOnboardModal(false)}>
+          <div
+            className="w-full max-w-2xl bg-surface border border-border rounded-lg shadow-xl overflow-hidden flex flex-col max-h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="px-5 py-4 border-b border-border flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <UserPlus className="w-4 h-4 text-accent" />
@@ -612,8 +622,8 @@ export const EmployeesView: React.FC = () => {
                 </button>
                 <button
                   onClick={handleConfirmOnboard}
-                  disabled={creatingEmp}
-                  className="px-3 py-1.5 rounded text-[13px] font-medium bg-accent hover:bg-accent-500 text-white transition-colors"
+                  disabled={creatingEmp || !onboardName.trim() || !onboardEmail.trim()}
+                  className="px-3 py-1.5 rounded text-[13px] font-medium bg-accent hover:bg-accent-500 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {creatingEmp ? "Creating..." : "Confirm & onboard"}
                 </button>

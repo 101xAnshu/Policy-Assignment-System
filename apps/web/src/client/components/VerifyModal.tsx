@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { verifyIncrementalSystem } from "../api";
+import { useModalBehavior } from "../useModalBehavior";
 import {
   ShieldCheck,
   CheckCircle2,
@@ -18,6 +19,8 @@ export const VerifyModal: React.FC<VerifyModalProps> = ({ onClose }) => {
   const [report, setReport] = useState<any | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  useModalBehavior(onClose);
+
   const handleRunVerify = async () => {
     setRunning(true);
     setError(null);
@@ -32,8 +35,11 @@ export const VerifyModal: React.FC<VerifyModalProps> = ({ onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl bg-surface border border-border rounded-lg shadow-xl overflow-hidden flex flex-col max-h-[85vh]">
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-2xl bg-surface border border-border rounded-lg shadow-xl overflow-hidden flex flex-col max-h-[85vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-3">

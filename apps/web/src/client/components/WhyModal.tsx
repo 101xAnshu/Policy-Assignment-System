@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { fetchWhy } from "../api";
+import { useModalBehavior } from "../useModalBehavior";
 import { X, CheckCircle2, XCircle, AlertTriangle, HelpCircle } from "lucide-react";
 
 interface WhyModalProps {
@@ -22,6 +23,8 @@ export const WhyModal: React.FC<WhyModalProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<any>(null);
+
+  useModalBehavior(onClose);
 
   useEffect(() => {
     let isMounted = true;
@@ -76,8 +79,11 @@ export const WhyModal: React.FC<WhyModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60">
-      <div className="bg-surface border border-border rounded-lg w-full max-w-2xl shadow-xl overflow-hidden flex flex-col max-h-[85vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60" onClick={onClose}>
+      <div
+        className="bg-surface border border-border rounded-lg w-full max-w-2xl shadow-xl overflow-hidden flex flex-col max-h-[85vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="px-5 py-4 border-b border-border flex items-center justify-between">
           <div className="flex items-center gap-3">
